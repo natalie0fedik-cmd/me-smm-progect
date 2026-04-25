@@ -623,7 +623,9 @@ export default function ProjectPage() {
             {activeGroup.tabs.length > 1 && (
               <div className="flex gap-2 mb-6 flex-wrap">
                 {activeGroup.tabs.map((tab) => {
-                  const isFilled = project.data[tab.id]?.trim().length > 0
+                  const isFilled = tab.custom && tab.fields
+                    ? tab.fields.some((f) => project.data[f]?.trim().length > 0)
+                    : project.data[tab.id as keyof ProjectData]?.trim().length > 0
                   const isActive = activeTabId === tab.id
                   return (
                     <button
