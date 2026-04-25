@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Menu,
   X,
+  Plus,
   TrendingUp,
   Edit3,
   Check,
@@ -54,8 +55,9 @@ const GROUPS: GroupDef[] = [
         id: 'goals',
         label: 'ЦІЛІ',
         number: '2',
-        description: 'Стратегічні та тактичні цілі на визначений період',
-        placeholder: 'Ціль 1: збільшити охоплення на X%\nЦіль 2: залучити N нових підписників\nЦіль 3: ...',
+        description: 'Стратегічні та тактичні цілі',
+        custom: true,
+        fields: ['goals'],
       },
       {
         id: 'tasks',
@@ -387,6 +389,139 @@ function WhoWeAreForm({
   )
 }
 
+// ─── Goals structured form ────────────────────────────────────────────────────
+
+interface StrategicGoal { id: string; title: string; description: string; metrics: string }
+interface GoalsData { strategic: StrategicGoal[]; tactical: string[] }
+
+const DEFAULT_GOALS: GoalsData = {
+  strategic: [
+    { id: '1', title: 'Підвищити впізнаваність бренду', description: '', metrics: '' },
+    { id: '2', title: 'Побудувати лояльну спільноту', description: '', metrics: '' },
+    { id: '3', title: 'Збільшити продажі', description: '', metrics: '' },
+  ],
+  tactical: [],
+}
+
+function parseGoals(raw: string): GoalsData {
+  if (!raw) return structuredClone(DEFAULT_GOALS)
+  try { return JSON.parse(raw) } catch { return structuredClone(DEFAULT_GOALS) }
+}
+
+function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const goals = parseGoals(data.goals)
+
+  function save(next: GoalsData) { updateField('goals', JSON.stringify(next)) }
+
+  function addStrategic() {
+    save({ ...goals, strategic: [...goals.strategic, { id: crypto.randomUUID(), title: '', description: '', metrics: '' }] })
+  }
+  function removeStrategic(id: string) {
+    save({ ...goals, strategic: goals.strategic.filter((g) => g.id !== id) })
+  }
+  function updateStrategic(id: string, field: keyof StrategicGoal, value: string) {
+    save({ ...goals, strategic: goals.strategic.map((g) => g.id === id ? { ...g, [field]: value } : g) })
+  }
+  function addTactical() { save({ ...goals, tactical: [...goals.tactical, ''] }) }
+  function removeTactical(i: number) { save({ ...goals, tactical: goals.tactical.filter((_, idx) => idx !== i) }) }
+  function updateTactical(i: number, value: string) {
+    const t = [...goals.tactical]; t[i] = value; save({ ...goals, tactical: t })
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Strategic */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">★</span>
+          Стратегічні цілі (на рік)
+        </h3>
+        <div className="space-y-4">
+          {goals.strategic.map((goal, i) => (
+            <div key={goal.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  {i + 1}
+                </span>
+                <input
+                  type="text"
+                  value={goal.title}
+                  onChange={(e) => updateStrategic(goal.id, 'title', e.target.value)}
+                  placeholder="Назва цілі"
+                  className="flex-1 bg-transparent border-b border-slate-700 focus:border-indigo-500 pb-1 text-white text-sm font-medium placeholder-slate-600 outline-none transition-colors"
+                />
+                <button
+                  onClick={() => removeStrategic(goal.id)}
+                  className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+                <textarea
+                  value={goal.description}
+                  onChange={(e) => updateStrategic(goal.id, 'description', e.target.value)}
+                  placeholder="Деталізуйте: в якому регіоні, серед якої аудиторії, показники та канали"
+                  rows={2}
+                  className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Метрики успіху</label>
+                <input
+                  type="text"
+                  value={goal.metrics}
+                  onChange={(e) => updateStrategic(goal.id, 'metrics', e.target.value)}
+                  placeholder="Наприклад: +50% охоплення, 10к підписників"
+                  className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                />
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={addStrategic}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати ціль
+          </button>
+        </div>
+      </div>
+
+      {/* Tactical */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold">◎</span>
+          Тактичні цілі (на квартал)
+        </h3>
+        <div className="space-y-2">
+          {goals.tactical.map((t, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 mt-px" />
+              <input
+                type="text"
+                value={t}
+                onChange={(e) => updateTactical(i, e.target.value)}
+                placeholder="Тактична ціль на квартал"
+                className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+              />
+              <button onClick={() => removeTactical(i)} className="text-slate-600 hover:text-red-400 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addTactical}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-violet-500/50 rounded-xl text-slate-500 hover:text-violet-400 text-sm transition-all flex items-center justify-center gap-2 mt-2"
+          >
+            <Plus size={14} /> Додати тактичну ціль
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -658,8 +793,10 @@ export default function ProjectPage() {
               </div>
               <p className="text-slate-500 text-sm mb-5">{activeTab.description}</p>
 
-              {activeTab.custom ? (
+              {activeTab.custom && activeTab.id === 'whoWeAre' ? (
                 <WhoWeAreForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'goals' ? (
+                <GoalsForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
