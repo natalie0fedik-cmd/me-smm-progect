@@ -63,8 +63,9 @@ const GROUPS: GroupDef[] = [
         id: 'tasks',
         label: 'ЗАДАЧІ',
         number: '3',
-        description: 'Конкретні задачі для досягнення цілей',
-        placeholder: '— Задача 1\n— Задача 2\n— Задача 3',
+        description: 'Ключові задачі для досягнення цілей',
+        custom: true,
+        fields: ['tasks'],
       },
     ],
   },
@@ -522,6 +523,111 @@ function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: 
   )
 }
 
+// ─── Tasks structured form ────────────────────────────────────────────────────
+
+interface TaskGroup { id: string; title: string; tasks: string[] }
+interface TasksData { groups: TaskGroup[] }
+
+function parseTasks(rawTasks: string, rawGoals: string): TasksData {
+  if (rawTasks) {
+    try { return JSON.parse(rawTasks) } catch { /* fall through */ }
+  }
+  // Auto-populate groups from strategic goals
+  const goals = parseGoals(rawGoals)
+  if (goals.strategic.length > 0) {
+    return { groups: goals.strategic.map((g) => ({ id: g.id, title: g.title, tasks: [] })) }
+  }
+  return { groups: [{ id: crypto.randomUUID(), title: '', tasks: [] }] }
+}
+
+function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const tasksData = parseTasks(data.tasks, data.goals)
+
+  function save(next: TasksData) { updateField('tasks', JSON.stringify(next)) }
+
+  function addGroup() {
+    save({ groups: [...tasksData.groups, { id: crypto.randomUUID(), title: '', tasks: [] }] })
+  }
+  function removeGroup(id: string) {
+    save({ groups: tasksData.groups.filter((g) => g.id !== id) })
+  }
+  function updateGroupTitle(id: string, title: string) {
+    save({ groups: tasksData.groups.map((g) => g.id === id ? { ...g, title } : g) })
+  }
+  function addTask(groupId: string) {
+    save({ groups: tasksData.groups.map((g) => g.id === groupId ? { ...g, tasks: [...g.tasks, ''] } : g) })
+  }
+  function updateTask(groupId: string, idx: number, value: string) {
+    save({
+      groups: tasksData.groups.map((g) => {
+        if (g.id !== groupId) return g
+        const tasks = [...g.tasks]; tasks[idx] = value
+        return { ...g, tasks }
+      }),
+    })
+  }
+  function removeTask(groupId: string, idx: number) {
+    save({ groups: tasksData.groups.map((g) => g.id === groupId ? { ...g, tasks: g.tasks.filter((_, i) => i !== idx) } : g) })
+  }
+
+  return (
+    <div className="space-y-5">
+      {tasksData.groups.map((group, gi) => (
+        <div key={group.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4">
+          {/* Group header */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
+              {gi + 1}
+            </span>
+            <input
+              type="text"
+              value={group.title}
+              onChange={(e) => updateGroupTitle(group.id, e.target.value)}
+              placeholder="Назва групи задач (ціль)"
+              className="flex-1 bg-transparent border-b border-slate-700 focus:border-indigo-500 pb-1 text-white text-sm font-semibold placeholder-slate-600 outline-none transition-colors"
+            />
+            <button onClick={() => removeGroup(group.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Tasks list */}
+          <div className="space-y-2 pl-9">
+            {group.tasks.map((task, ti) => (
+              <div key={ti} className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={task}
+                  onChange={(e) => updateTask(group.id, ti, e.target.value)}
+                  placeholder="Задача"
+                  className="flex-1 bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                />
+                <button onClick={() => removeTask(group.id, ti)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => addTask(group.id)}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-400 transition-colors mt-1 pl-3"
+            >
+              <Plus size={12} /> Додати задачу
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={addGroup}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати групу задач
+      </button>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -797,6 +903,8 @@ export default function ProjectPage() {
                 <WhoWeAreForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'goals' ? (
                 <GoalsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'tasks' ? (
+                <TasksForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
