@@ -47,14 +47,6 @@ export function deleteProject(id: string): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
 }
 
-export function updateProjectField(id: string, field: keyof ProjectData, value: string): void {
-  const project = getProject(id)
-  if (!project) return
-  project.data[field] = value
-  project.updatedAt = new Date().toISOString()
-  saveProject(project)
-}
-
 export function getProgress(data: ProjectData): number {
   const values = Object.values(data)
   const filled = values.filter((v) => v.trim().length > 0).length

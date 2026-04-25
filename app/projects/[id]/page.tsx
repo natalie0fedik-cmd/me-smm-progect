@@ -18,11 +18,13 @@ import { getProject, saveProject, getProgress } from '@/lib/storage'
 // ─── Group definitions ────────────────────────────────────────────────────────
 
 interface TabDef {
-  id: keyof ProjectData
+  id: string
   label: string
   number: string
-  placeholder: string
+  placeholder?: string
   description: string
+  custom?: boolean
+  fields?: (keyof ProjectData)[]
 }
 
 interface GroupDef {
@@ -44,8 +46,9 @@ const GROUPS: GroupDef[] = [
         id: 'whoWeAre',
         label: 'ХТО МИ',
         number: '1',
-        description: 'Опис компанії, сфера діяльності, продукти / послуги, ключові факти',
-        placeholder: 'Ми — [назва компанії], займаємось [сфера]. Наша аудиторія — [опис]. Ключові продукти/послуги: ...',
+        description: 'Загальна інформація про компанію та продукти/послуги',
+        custom: true,
+        fields: ['companyName', 'companyIndustry', 'companyYear', 'companyGeo', 'companyTeam', 'companyProducts'],
       },
       {
         id: 'goals',
@@ -272,7 +275,116 @@ const GROUPS: GroupDef[] = [
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function groupFilled(group: GroupDef, data: ProjectData): number {
-  return group.tabs.filter((t) => data[t.id]?.trim().length > 0).length
+  return group.tabs.filter((t) => {
+    if (t.custom && t.fields) {
+      return t.fields.some((f) => data[f]?.trim().length > 0)
+    }
+    return data[t.id as keyof ProjectData]?.trim().length > 0
+  }).length
+}
+
+// ─── WhoWeAre structured form ─────────────────────────────────────────────────
+
+interface FieldProps {
+  label: string
+  placeholder: string
+  value: string
+  onChange: (v: string) => void
+  multiline?: boolean
+}
+
+function Field({ label, placeholder, value, onChange, multiline }: FieldProps) {
+  return (
+    <div className="group">
+      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+        {label}
+      </label>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={5}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-y"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+        />
+      )}
+    </div>
+  )
+}
+
+function WhoWeAreForm({
+  data,
+  updateField,
+}: {
+  data: ProjectData
+  updateField: (f: keyof ProjectData, v: string) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">i</span>
+          Загальна інформація про компанію
+        </h3>
+        <div className="space-y-4">
+          <Field
+            label="Назва компанії"
+            placeholder="Вкажіть повну назву"
+            value={data.companyName}
+            onChange={(v) => updateField('companyName', v)}
+          />
+          <Field
+            label="Сфера діяльності"
+            placeholder="Опишіть основний напрямок бізнесу"
+            value={data.companyIndustry}
+            onChange={(v) => updateField('companyIndustry', v)}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="Рік заснування"
+              placeholder="Наприклад: 2018"
+              value={data.companyYear}
+              onChange={(v) => updateField('companyYear', v)}
+            />
+            <Field
+              label="Географія присутності"
+              placeholder="Міста / країни"
+              value={data.companyGeo}
+              onChange={(v) => updateField('companyGeo', v)}
+            />
+          </div>
+          <Field
+            label="Команда"
+            placeholder="Кількість співробітників, ключові особи"
+            value={data.companyTeam}
+            onChange={(v) => updateField('companyTeam', v)}
+          />
+        </div>
+      </div>
+
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs">★</span>
+          Продукти / послуги
+        </h3>
+        <Field
+          label="Опис продуктів та послуг"
+          placeholder="Опишіть детально що саме пропонуєте клієнтам, унікальні особливості кожного продукту/послуги..."
+          value={data.companyProducts}
+          onChange={(v) => updateField('companyProducts', v)}
+          multiline
+        />
+      </div>
+    </div>
+  )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -541,18 +653,20 @@ export default function ProjectPage() {
                   <span className="text-xs text-slate-500 font-mono">{activeTab.number}</span>
                   <h2 className="text-lg font-bold text-white mt-0.5">{activeTab.label}</h2>
                 </div>
-                {project.data[activeTab.id]?.trim().length > 0 && (
-                  <CheckCircle2 size={18} className="text-emerald-400 mt-1 flex-shrink-0" />
-                )}
               </div>
-              <p className="text-slate-500 text-sm mb-4">{activeTab.description}</p>
-              <textarea
-                value={project.data[activeTab.id] || ''}
-                onChange={(e) => updateField(activeTab.id, e.target.value)}
-                placeholder={activeTab.placeholder}
-                rows={10}
-                className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-y"
-              />
+              <p className="text-slate-500 text-sm mb-5">{activeTab.description}</p>
+
+              {activeTab.custom ? (
+                <WhoWeAreForm data={project.data} updateField={updateField} />
+              ) : (
+                <textarea
+                  value={project.data[activeTab.id as keyof ProjectData] || ''}
+                  onChange={(e) => updateField(activeTab.id as keyof ProjectData, e.target.value)}
+                  placeholder={activeTab.placeholder}
+                  rows={10}
+                  className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-y"
+                />
+              )}
             </div>
 
             {/* Next block nav */}
