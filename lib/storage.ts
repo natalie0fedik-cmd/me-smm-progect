@@ -2,11 +2,21 @@ import { Project, ProjectData, EMPTY_PROJECT_DATA } from '@/types'
 
 const STORAGE_KEY = 'smm_projects'
 
+// Migrate old project data to current schema
+function migrateProject(p: Project): Project {
+  return {
+    ...p,
+    data: { ...EMPTY_PROJECT_DATA, ...p.data },
+  }
+}
+
 export function getProjects(): Project[] {
   if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    const projects: Project[] = JSON.parse(raw)
+    return projects.map(migrateProject)
   } catch {
     return []
   }
@@ -49,6 +59,6 @@ export function deleteProject(id: string): void {
 
 export function getProgress(data: ProjectData): number {
   const values = Object.values(data)
-  const filled = values.filter((v) => v.trim().length > 0).length
+  const filled = values.filter((v) => typeof v === 'string' && v.trim().length > 0).length
   return Math.round((filled / values.length) * 100)
 }

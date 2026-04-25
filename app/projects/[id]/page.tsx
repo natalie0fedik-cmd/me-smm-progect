@@ -405,8 +405,9 @@ const DEFAULT_GOALS: GoalsData = {
 }
 
 function parseGoals(raw: string): GoalsData {
-  if (!raw) return structuredClone(DEFAULT_GOALS)
-  try { return JSON.parse(raw) } catch { return structuredClone(DEFAULT_GOALS) }
+  const fallback = (): GoalsData => JSON.parse(JSON.stringify(DEFAULT_GOALS))
+  if (!raw) return fallback()
+  try { return JSON.parse(raw) } catch { return fallback() }
 }
 
 function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
