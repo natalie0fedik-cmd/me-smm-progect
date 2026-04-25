@@ -525,104 +525,161 @@ function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: 
 
 // ─── Tasks structured form ────────────────────────────────────────────────────
 
-interface TaskGroup { id: string; title: string; tasks: string[] }
-interface TasksData { groups: TaskGroup[] }
+type TaskPriority = 'high' | 'medium' | 'low'
+type TaskStatus = 'planned' | 'inprogress' | 'done'
 
-function parseTasks(rawTasks: string, rawGoals: string): TasksData {
-  if (rawTasks) {
-    try { return JSON.parse(rawTasks) } catch { /* fall through */ }
-  }
-  // Auto-populate groups from strategic goals
-  const goals = parseGoals(rawGoals)
-  if (goals.strategic.length > 0) {
-    return { groups: goals.strategic.map((g) => ({ id: g.id, title: g.title, tasks: [] })) }
-  }
-  return { groups: [{ id: crypto.randomUUID(), title: '', tasks: [] }] }
+interface Task {
+  id: string
+  title: string
+  deadline: string
+  priority: TaskPriority
+  status: TaskStatus
+  assignee: string
+}
+
+interface TasksData { tasks: Task[] }
+
+const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = {
+  high:   { label: 'Високий', color: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  medium: { label: 'Середній', color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
+  low:    { label: 'Низький', color: 'text-slate-400 bg-slate-400/10 border-slate-400/30' },
+}
+
+const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; dot: string }> = {
+  planned:    { label: 'Заплановано', color: 'text-slate-400', dot: 'bg-slate-500' },
+  inprogress: { label: 'В процесі',   color: 'text-indigo-400', dot: 'bg-indigo-500' },
+  done:       { label: 'Виконано',    color: 'text-emerald-400', dot: 'bg-emerald-500' },
+}
+
+function parseTasksList(raw: string): TasksData {
+  if (!raw) return { tasks: [] }
+  try { return JSON.parse(raw) } catch { return { tasks: [] } }
 }
 
 function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
-  const tasksData = parseTasks(data.tasks, data.goals)
+  const td = parseTasksList(data.tasks)
 
   function save(next: TasksData) { updateField('tasks', JSON.stringify(next)) }
 
-  function addGroup() {
-    save({ groups: [...tasksData.groups, { id: crypto.randomUUID(), title: '', tasks: [] }] })
+  function addTask() {
+    const newTask: Task = { id: crypto.randomUUID(), title: '', deadline: '', priority: 'medium', status: 'planned', assignee: '' }
+    save({ tasks: [...td.tasks, newTask] })
   }
-  function removeGroup(id: string) {
-    save({ groups: tasksData.groups.filter((g) => g.id !== id) })
+  function removeTask(id: string) { save({ tasks: td.tasks.filter((t) => t.id !== id) }) }
+  function updateTask(id: string, field: keyof Task, value: string) {
+    save({ tasks: td.tasks.map((t) => t.id === id ? { ...t, [field]: value } : t) })
   }
-  function updateGroupTitle(id: string, title: string) {
-    save({ groups: tasksData.groups.map((g) => g.id === id ? { ...g, title } : g) })
-  }
-  function addTask(groupId: string) {
-    save({ groups: tasksData.groups.map((g) => g.id === groupId ? { ...g, tasks: [...g.tasks, ''] } : g) })
-  }
-  function updateTask(groupId: string, idx: number, value: string) {
-    save({
-      groups: tasksData.groups.map((g) => {
-        if (g.id !== groupId) return g
-        const tasks = [...g.tasks]; tasks[idx] = value
-        return { ...g, tasks }
-      }),
-    })
-  }
-  function removeTask(groupId: string, idx: number) {
-    save({ groups: tasksData.groups.map((g) => g.id === groupId ? { ...g, tasks: g.tasks.filter((_, i) => i !== idx) } : g) })
-  }
+
+  const total = td.tasks.length
+  const done  = td.tasks.filter((t) => t.status === 'done').length
 
   return (
-    <div className="space-y-5">
-      {tasksData.groups.map((group, gi) => (
-        <div key={group.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4">
-          {/* Group header */}
-          <div className="flex items-center gap-3 mb-3">
-            <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
-              {gi + 1}
-            </span>
-            <input
-              type="text"
-              value={group.title}
-              onChange={(e) => updateGroupTitle(group.id, e.target.value)}
-              placeholder="Назва групи задач (ціль)"
-              className="flex-1 bg-transparent border-b border-slate-700 focus:border-indigo-500 pb-1 text-white text-sm font-semibold placeholder-slate-600 outline-none transition-colors"
+    <div className="space-y-4">
+      {/* Progress bar */}
+      {total > 0 && (
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.round((done / total) * 100)}%` }}
             />
-            <button onClick={() => removeGroup(group.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
-              <X size={14} />
-            </button>
           </div>
-
-          {/* Tasks list */}
-          <div className="space-y-2 pl-9">
-            {group.tasks.map((task, ti) => (
-              <div key={ti} className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={task}
-                  onChange={(e) => updateTask(group.id, ti, e.target.value)}
-                  placeholder="Задача"
-                  className="flex-1 bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
-                />
-                <button onClick={() => removeTask(group.id, ti)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() => addTask(group.id)}
-              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-400 transition-colors mt-1 pl-3"
-            >
-              <Plus size={12} /> Додати задачу
-            </button>
-          </div>
+          <span className="text-xs text-slate-400 flex-shrink-0">{done}/{total} виконано</span>
         </div>
-      ))}
+      )}
+
+      {/* Task list */}
+      <div className="space-y-2">
+        {td.tasks.map((task) => (
+          <div key={task.id} className={`bg-slate-900/50 border rounded-xl p-4 transition-all ${task.status === 'done' ? 'border-emerald-500/20 opacity-70' : 'border-slate-700/60'}`}>
+            {/* Row 1: status dot + title + remove */}
+            <div className="flex items-start gap-3">
+              {/* Status toggle */}
+              <button
+                onClick={() => {
+                  const next: TaskStatus = task.status === 'planned' ? 'inprogress' : task.status === 'inprogress' ? 'done' : 'planned'
+                  updateTask(task.id, 'status', next)
+                }}
+                title={STATUS_CONFIG[task.status].label}
+                className="mt-0.5 flex-shrink-0"
+              >
+                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                  task.status === 'done' ? 'bg-emerald-500 border-emerald-500' :
+                  task.status === 'inprogress' ? 'border-indigo-500 bg-indigo-500/20' :
+                  'border-slate-600 bg-transparent'
+                }`}>
+                  {task.status === 'done' && <Check size={10} className="text-white" />}
+                  {task.status === 'inprogress' && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                </span>
+              </button>
+
+              <input
+                type="text"
+                value={task.title}
+                onChange={(e) => updateTask(task.id, 'title', e.target.value)}
+                placeholder="Назва задачі"
+                className={`flex-1 bg-transparent text-sm placeholder-slate-600 outline-none transition-colors ${
+                  task.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-100'
+                }`}
+              />
+              <button onClick={() => removeTask(task.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5">
+                <X size={13} />
+              </button>
+            </div>
+
+            {/* Row 2: meta fields */}
+            <div className="flex flex-wrap gap-2 mt-3 pl-7">
+              {/* Deadline */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">📅</span>
+                <input
+                  type="date"
+                  value={task.deadline}
+                  onChange={(e) => updateTask(task.id, 'deadline', e.target.value)}
+                  className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs text-slate-300 transition-colors"
+                />
+              </div>
+
+              {/* Priority */}
+              <select
+                value={task.priority}
+                onChange={(e) => updateTask(task.id, 'priority', e.target.value)}
+                className={`border rounded-lg px-2 py-1 text-xs font-medium transition-colors outline-none cursor-pointer ${PRIORITY_CONFIG[task.priority].color}`}
+              >
+                <option value="high">🔴 Високий</option>
+                <option value="medium">🟡 Середній</option>
+                <option value="low">⚪ Низький</option>
+              </select>
+
+              {/* Status */}
+              <select
+                value={task.status}
+                onChange={(e) => updateTask(task.id, 'status', e.target.value as TaskStatus)}
+                className={`bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs transition-colors outline-none cursor-pointer ${STATUS_CONFIG[task.status].color}`}
+              >
+                <option value="planned">⬜ Заплановано</option>
+                <option value="inprogress">🔷 В процесі</option>
+                <option value="done">✅ Виконано</option>
+              </select>
+
+              {/* Assignee */}
+              <input
+                type="text"
+                value={task.assignee}
+                onChange={(e) => updateTask(task.id, 'assignee', e.target.value)}
+                placeholder="👤 Відповідальний"
+                className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs text-slate-300 placeholder-slate-600 transition-colors"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
       <button
-        onClick={addGroup}
+        onClick={addTask}
         className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
       >
-        <Plus size={14} /> Додати групу задач
+        <Plus size={14} /> Додати задачу
       </button>
     </div>
   )
