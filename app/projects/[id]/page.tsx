@@ -554,7 +554,11 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; dot: str
 
 function parseTasksList(raw: string): TasksData {
   if (!raw) return { tasks: [] }
-  try { return JSON.parse(raw) } catch { return { tasks: [] } }
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && Array.isArray(parsed.tasks)) return parsed
+    return { tasks: [] } // handles old { groups: [...] } format
+  } catch { return { tasks: [] } }
 }
 
 function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
