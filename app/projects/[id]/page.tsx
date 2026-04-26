@@ -79,8 +79,9 @@ const GROUPS: GroupDef[] = [
         id: 'analytics',
         label: 'Аналітика',
         number: '4',
-        description: 'Поточний стан акаунтів, ключові показники, точка старту',
-        placeholder: 'Підписників: ...\nОхоплення: ...\nER: ...\nТоп-контент: ...',
+        description: 'Поточні показники акаунту, сегменти та портрети клієнтів',
+        custom: true,
+        fields: ['analytics'],
       },
       {
         id: 'competitorAnalysis',
@@ -697,6 +698,150 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
   )
 }
 
+// ─── Analytics structured form ───────────────────────────────────────────────
+
+interface BrandChampion { id: string; name: string; demographics: string; profession: string; needs: string; pains: string }
+interface AnalyticsData {
+  subscribers: string; audience: string; er: string
+  comments: string; reposts: string; reach: string
+  interests: string; income: string
+  champions: BrandChampion[]
+}
+
+function parseAnalytics(raw: string): AnalyticsData {
+  const empty: AnalyticsData = { subscribers: '', audience: '', er: '', comments: '', reposts: '', reach: '', interests: '', income: '', champions: [] }
+  if (!raw) return empty
+  try {
+    const p = JSON.parse(raw)
+    return { ...empty, ...p, champions: Array.isArray(p.champions) ? p.champions : [] }
+  } catch { return empty }
+}
+
+function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const a = parseAnalytics(data.analytics)
+  function save(next: AnalyticsData) { updateField('analytics', JSON.stringify(next)) }
+  function addChampion() {
+    save({ ...a, champions: [...a.champions, { id: crypto.randomUUID(), name: '', demographics: '', profession: '', needs: '', pains: '' }] })
+  }
+  function removeChampion(id: string) { save({ ...a, champions: a.champions.filter(c => c.id !== id) }) }
+  function updateChampion(id: string, field: keyof BrandChampion, value: string) {
+    save({ ...a, champions: a.champions.map(c => c.id === id ? { ...c, [field]: value } : c) })
+  }
+
+  const metric = (label: string, key: keyof AnalyticsData, placeholder: string, hint?: string) => (
+    <div>
+      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">{label}</label>
+      <div className="relative">
+        <input
+          type="text"
+          value={a[key] as string}
+          onChange={e => save({ ...a, [key]: e.target.value })}
+          placeholder={placeholder}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+        />
+        {hint && <span className="absolute right-3 top-2.5 text-xs text-slate-600">{hint}</span>}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-8">
+      {/* Metrics */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">📊</span>
+          Кількісні показники
+        </h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {metric('Підписники', 'subscribers', '10 000')}
+          {metric('Охоплення', 'reach', '25 000')}
+          {metric('ER', 'er', '3.5', '%')}
+          {metric('Аудиторія', 'audience', 'Жінки 25–34')}
+          {metric('Коментарі', 'comments', '~80 / пост')}
+          {metric('Репости', 'reposts', '~40 / пост')}
+        </div>
+      </div>
+
+      {/* Segments */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs">◉</span>
+          Основні сегменти
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Інтереси аудиторії</label>
+            <textarea
+              value={a.interests}
+              onChange={e => save({ ...a, interests: e.target.value })}
+              placeholder="Фітнес, здорове харчування, саморозвиток, подорожі..."
+              rows={3}
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Дохід / платоспроможність</label>
+            <input
+              type="text"
+              value={a.income}
+              onChange={e => save({ ...a, income: e.target.value })}
+              placeholder="Середній і вище середнього, 30 000–80 000 грн/міс"
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Brand Champions */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">★</span>
+          Бренд-чемпіони (портрети клієнтів)
+        </h3>
+        <div className="space-y-4">
+          {a.champions.map((c, i) => (
+            <div key={c.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                <input
+                  type="text"
+                  value={c.name}
+                  onChange={e => updateChampion(c.id, 'name', e.target.value)}
+                  placeholder="Назва портрету (напр. «Молода мама»)"
+                  className="flex-1 bg-transparent border-b border-slate-700 focus:border-indigo-500 pb-1 text-white text-sm font-semibold placeholder-slate-600 outline-none transition-colors"
+                />
+                <button onClick={() => removeChampion(c.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-10">
+                {([['demographics', 'Демографія', 'Жінка, 28 р., Київ'], ['profession', 'Професія', 'Маркетолог'], ['needs', 'Потреби', 'Економія часу, якість...'], ['pains', 'Болі', 'Не вистачає часу, дорого...']] as [keyof BrandChampion, string, string][]).map(([field, label, ph]) => (
+                  <div key={field}>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">{label}</label>
+                    <input
+                      type="text"
+                      value={c[field] as string}
+                      onChange={e => updateChampion(c.id, field, e.target.value)}
+                      placeholder={ph}
+                      className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={addChampion}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl text-slate-500 hover:text-emerald-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати портрет клієнта
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -974,6 +1119,8 @@ export default function ProjectPage() {
                 <GoalsForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'tasks' ? (
                 <TasksForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'analytics' ? (
+                <AnalyticsForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
