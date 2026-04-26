@@ -407,7 +407,14 @@ const DEFAULT_GOALS: GoalsData = {
 function parseGoals(raw: string): GoalsData {
   const fallback = (): GoalsData => JSON.parse(JSON.stringify(DEFAULT_GOALS))
   if (!raw) return fallback()
-  try { return JSON.parse(raw) } catch { return fallback() }
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return fallback()
+    return {
+      strategic: Array.isArray(parsed.strategic) ? parsed.strategic : fallback().strategic,
+      tactical: Array.isArray(parsed.tactical) ? parsed.tactical : [],
+    }
+  } catch { return fallback() }
 }
 
 function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
