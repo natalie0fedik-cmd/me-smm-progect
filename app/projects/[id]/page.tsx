@@ -87,8 +87,9 @@ const GROUPS: GroupDef[] = [
         id: 'competitorAnalysis',
         label: 'Конкуренти',
         number: '4.1',
-        description: 'Огляд конкурентів: сильні/слабкі сторони, контент, аудиторія',
-        placeholder: 'Конкурент 1: [назва]\n— Акаунт: ...\n— Сильні сторони: ...\n— Слабкі сторони: ...\n\nКонкурент 2: ...',
+        description: 'Аналіз конкурентів: посилання, сильні та слабкі сторони',
+        custom: true,
+        fields: ['competitorAnalysis'],
       },
     ],
   },
@@ -698,6 +699,105 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
   )
 }
 
+// ─── Competitor Analysis form ────────────────────────────────────────────────
+
+interface Competitor { id: string; name: string; website: string; instagram: string; tiktok: string; strengths: string; weaknesses: string }
+
+function parseCompetitors(raw: string): Competitor[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function CompetitorForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseCompetitors(data.competitorAnalysis)
+  function save(next: Competitor[]) { updateField('competitorAnalysis', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), name: '', website: '', instagram: '', tiktok: '', strengths: '', weaknesses: '' }]) }
+  function remove(id: string) { save(list.filter(c => c.id !== id)) }
+  function update(id: string, field: keyof Competitor, value: string) {
+    save(list.map(c => c.id === id ? { ...c, [field]: value } : c))
+  }
+
+  return (
+    <div className="space-y-4">
+      {list.map((c, i) => (
+        <div key={c.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+            <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+            <input
+              type="text"
+              value={c.name}
+              onChange={e => update(c.id, 'name', e.target.value)}
+              placeholder="Назва конкурента"
+              className="flex-1 bg-transparent text-white text-sm font-semibold placeholder-slate-600 outline-none"
+            />
+            <button onClick={() => remove(c.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Links row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                ['website',   '🌐 Сайт',      'https://example.com'],
+                ['instagram', '📸 Instagram',  '@назва'],
+                ['tiktok',    '🎵 TikTok',     '@назва'],
+              ] as [keyof Competitor, string, string][]).map(([field, label, ph]) => (
+                <div key={field}>
+                  <label className="text-xs text-slate-500 mb-1 block">{label}</label>
+                  <input
+                    type="text"
+                    value={c[field] as string}
+                    onChange={e => update(c.id, field, e.target.value)}
+                    placeholder={ph}
+                    className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Strengths / Weaknesses */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 block">
+                  <span>✅</span> Сильні сторони
+                </label>
+                <textarea
+                  value={c.strengths}
+                  onChange={e => update(c.id, 'strengths', e.target.value)}
+                  placeholder="— Великий охоплення&#10;— Якісний візуал&#10;— Активна спільнота"
+                  rows={4}
+                  className="w-full bg-slate-800/60 border border-slate-700 focus:border-emerald-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 block">
+                  <span>❌</span> Слабкі сторони
+                </label>
+                <textarea
+                  value={c.weaknesses}
+                  onChange={e => update(c.id, 'weaknesses', e.target.value)}
+                  placeholder="— Немає відео-контенту&#10;— Рідкі публікації&#10;— Слабке залучення"
+                  rows={4}
+                  className="w-full bg-slate-800/60 border border-slate-700 focus:border-red-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати конкурента
+      </button>
+    </div>
+  )
+}
+
 // ─── Analytics structured form ───────────────────────────────────────────────
 
 interface BrandChampion { id: string; name: string; demographics: string; profession: string; needs: string; pains: string }
@@ -1121,6 +1221,8 @@ export default function ProjectPage() {
                 <TasksForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'analytics' ? (
                 <AnalyticsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'competitorAnalysis' ? (
+                <CompetitorForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
