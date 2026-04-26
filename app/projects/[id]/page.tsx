@@ -118,28 +118,32 @@ const GROUPS: GroupDef[] = [
         label: 'Цінності',
         number: '5.3',
         description: 'Ключові принципи та цінності, якими керується бренд',
-        placeholder: '1. Цінність — опис\n2. Цінність — опис\n3. Цінність — опис',
+        custom: true,
+        fields: ['brandValues'],
       },
       {
         id: 'brandArchetypes',
         label: 'Архетипи',
         number: '5.4',
         description: 'Архетип(и) бренду за Юнгом та їх прояв у комунікації',
-        placeholder: 'Основний архетип: [назва]\nОпис: ...\nЯк проявляється: ...',
+        custom: true,
+        fields: ['brandArchetypes'],
       },
       {
         id: 'brandEnemies',
         label: 'Вороги',
         number: '5.5',
         description: 'Що бренд відкидає, чому протистоїть, від чого дистанціюється',
-        placeholder: 'Бренд виступає проти:\n— ...\n— ...',
+        custom: true,
+        fields: ['brandEnemies'],
       },
       {
         id: 'communicationPillars',
         label: 'Кити',
         number: '5.6',
         description: 'Ключові теми та напрямки, навколо яких будується комунікація',
-        placeholder: 'Кит 1: [назва] — опис\nКит 2: [назва] — опис\nКит 3: [назва] — опис',
+        custom: true,
+        fields: ['communicationPillars'],
       },
     ],
   },
@@ -942,6 +946,255 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
   )
 }
 
+// ─── Brand Values form ───────────────────────────────────────────────────────
+
+interface BrandValue { id: string; title: string; description: string; translation: string }
+
+function parseBrandValues(raw: string): BrandValue[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function BrandValuesForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseBrandValues(data.brandValues)
+  function save(next: BrandValue[]) { updateField('brandValues', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), title: '', description: '', translation: '' }]) }
+  function remove(id: string) { save(list.filter(v => v.id !== id)) }
+  function update(id: string, field: keyof BrandValue, value: string) {
+    save(list.map(v => v.id === id ? { ...v, [field]: value } : v))
+  }
+
+  return (
+    <div className="space-y-4">
+      {list.map((v, i) => (
+        <div key={v.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+            <span className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+            <input
+              type="text"
+              value={v.title}
+              onChange={e => update(v.id, 'title', e.target.value)}
+              placeholder="Назва цінності"
+              className="flex-1 bg-transparent text-white text-sm font-semibold placeholder-slate-600 outline-none"
+            />
+            <button onClick={() => remove(v.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+              <textarea
+                value={v.description}
+                onChange={e => update(v.id, 'description', e.target.value)}
+                placeholder="Що означає ця цінність для бренду..."
+                rows={2}
+                className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Як транслюємо</label>
+              <textarea
+                value={v.translation}
+                onChange={e => update(v.id, 'translation', e.target.value)}
+                placeholder="Через що проявляємо цю цінність у комунікації..."
+                rows={2}
+                className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-violet-500/50 rounded-xl text-slate-500 hover:text-violet-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати цінність
+      </button>
+    </div>
+  )
+}
+
+// ─── Brand Archetypes form ────────────────────────────────────────────────────
+
+interface ArchetypeEntry { name: string; description: string; keywords: string }
+interface BrandArchetypesData { primary: ArchetypeEntry; secondary: ArchetypeEntry }
+
+const EMPTY_ARCHETYPES: BrandArchetypesData = {
+  primary:   { name: '', description: '', keywords: '' },
+  secondary: { name: '', description: '', keywords: '' },
+}
+
+function parseBrandArchetypes(raw: string): BrandArchetypesData {
+  if (!raw) return JSON.parse(JSON.stringify(EMPTY_ARCHETYPES))
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_ARCHETYPES))
+    return {
+      primary:   { ...EMPTY_ARCHETYPES.primary,   ...(p.primary   ?? {}) },
+      secondary: { ...EMPTY_ARCHETYPES.secondary, ...(p.secondary ?? {}) },
+    }
+  } catch { return JSON.parse(JSON.stringify(EMPTY_ARCHETYPES)) }
+}
+
+function BrandArchetypesForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const a = parseBrandArchetypes(data.brandArchetypes)
+  function save(next: BrandArchetypesData) { updateField('brandArchetypes', JSON.stringify(next)) }
+  function updateEntry(key: 'primary' | 'secondary', field: keyof ArchetypeEntry, value: string) {
+    save({ ...a, [key]: { ...a[key], [field]: value } })
+  }
+
+  const archetypeBlock = (key: 'primary' | 'secondary', label: string, color: string, accent: string) => (
+    <div className={`bg-slate-900/50 border ${accent} rounded-xl overflow-hidden`}>
+      <div className={`px-4 py-3 border-b ${accent} bg-slate-800/40`}>
+        <span className={`text-xs font-bold uppercase tracking-wider ${color}`}>{label}</span>
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Назва архетипу</label>
+          <input
+            type="text"
+            value={a[key].name}
+            onChange={e => updateEntry(key, 'name', e.target.value)}
+            placeholder="Наприклад: Герой, Мудрець, Творець..."
+            className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+          <textarea
+            value={a[key].description}
+            onChange={e => updateEntry(key, 'description', e.target.value)}
+            placeholder="Як цей архетип проявляється у бренді..."
+            rows={3}
+            className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+          />
+        </div>
+        {key === 'primary' && (
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Слова-маячки</label>
+            <input
+              type="text"
+              value={a[key].keywords}
+              onChange={e => updateEntry(key, 'keywords', e.target.value)}
+              placeholder="Сміливо, перемога, дія, результат..."
+              className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {archetypeBlock('primary',   'Основний архетип',     'text-indigo-400', 'border-indigo-500/30')}
+      {archetypeBlock('secondary', 'Додатковий архетип',   'text-slate-400',  'border-slate-700/60')}
+    </div>
+  )
+}
+
+// ─── Brand Enemies form ───────────────────────────────────────────────────────
+
+function parseBrandEnemies(raw: string): string[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function BrandEnemiesForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseBrandEnemies(data.brandEnemies)
+  function save(next: string[]) { updateField('brandEnemies', JSON.stringify(next)) }
+  function add() { save([...list, '']) }
+  function remove(i: number) { save(list.filter((_, idx) => idx !== i)) }
+  function update(i: number, value: string) { const n = [...list]; n[i] = value; save(n) }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500 italic">Що бренд відкидає та чому протистоїть (халтура, обман, нерівність...)</p>
+      <div className="space-y-2">
+        {list.map((enemy, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="text-red-400 flex-shrink-0 text-sm">✕</span>
+            <input
+              type="text"
+              value={enemy}
+              onChange={e => update(i, e.target.value)}
+              placeholder="Ворог бренду..."
+              className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-red-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+            <button onClick={() => remove(i)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-red-500/40 rounded-xl text-slate-500 hover:text-red-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати ворога бренду
+      </button>
+    </div>
+  )
+}
+
+// ─── Communication Pillars form ───────────────────────────────────────────────
+
+interface CommunicationPillar { id: string; topic: string; description: string }
+
+function parsePillars(raw: string): CommunicationPillar[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function CommunicationPillarsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parsePillars(data.communicationPillars)
+  function save(next: CommunicationPillar[]) { updateField('communicationPillars', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), topic: '', description: '' }]) }
+  function remove(id: string) { save(list.filter(p => p.id !== id)) }
+  function update(id: string, field: keyof CommunicationPillar, value: string) {
+    save(list.map(p => p.id === id ? { ...p, [field]: value } : p))
+  }
+
+  return (
+    <div className="space-y-4">
+      {list.map((p, i) => (
+        <div key={p.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+            <input
+              type="text"
+              value={p.topic}
+              onChange={e => update(p.id, 'topic', e.target.value)}
+              placeholder="Тема / назва кита"
+              className="flex-1 bg-transparent border-b border-slate-700 focus:border-emerald-500/50 pb-1 text-white text-sm font-semibold placeholder-slate-600 outline-none transition-colors"
+            />
+            <button onClick={() => remove(p.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="pl-9">
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+            <textarea
+              value={p.description}
+              onChange={e => update(p.id, 'description', e.target.value)}
+              placeholder="Про що говоримо, який контент публікуємо в межах цього напрямку..."
+              rows={3}
+              className="w-full bg-slate-800/60 border border-slate-700 focus:border-emerald-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl text-slate-500 hover:text-emerald-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати кит комунікації
+      </button>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -1223,6 +1476,14 @@ export default function ProjectPage() {
                 <AnalyticsForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'competitorAnalysis' ? (
                 <CompetitorForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'brandValues' ? (
+                <BrandValuesForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'brandArchetypes' ? (
+                <BrandArchetypesForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'brandEnemies' ? (
+                <BrandEnemiesForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'communicationPillars' ? (
+                <CommunicationPillarsForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
