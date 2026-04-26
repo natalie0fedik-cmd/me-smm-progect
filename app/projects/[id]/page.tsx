@@ -158,7 +158,8 @@ const GROUPS: GroupDef[] = [
         label: 'УЦП',
         number: '6',
         description: 'Унікальна ціннісна пропозиція — що відрізняє бренд від конкурентів',
-        placeholder: 'Ми допомагаємо [цільова аудиторія] досягти [результат] завдяки [унікальний підхід/перевага].',
+        custom: true,
+        fields: ['uvp'],
       },
     ],
   },
@@ -946,6 +947,100 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
   )
 }
 
+// ─── UVP structured form ─────────────────────────────────────────────────────
+
+interface UvpData { features: string[]; keyMessage: string; insight: string }
+
+const EMPTY_UVP: UvpData = { features: [], keyMessage: '', insight: '' }
+
+function parseUvp(raw: string): UvpData {
+  if (!raw) return JSON.parse(JSON.stringify(EMPTY_UVP))
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_UVP))
+    return {
+      features:   Array.isArray(p.features) ? p.features : [],
+      keyMessage: typeof p.keyMessage === 'string' ? p.keyMessage : '',
+      insight:    typeof p.insight    === 'string' ? p.insight    : '',
+    }
+  } catch { return JSON.parse(JSON.stringify(EMPTY_UVP)) }
+}
+
+function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const u = parseUvp(data.uvp)
+  function save(next: UvpData) { updateField('uvp', JSON.stringify(next)) }
+  function addFeature() { save({ ...u, features: [...u.features, ''] }) }
+  function removeFeature(i: number) { save({ ...u, features: u.features.filter((_, idx) => idx !== i) }) }
+  function updateFeature(i: number, value: string) {
+    const f = [...u.features]; f[i] = value; save({ ...u, features: f })
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Unique features */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">💎</span>
+          Унікальні особливості
+        </h3>
+        <div className="space-y-2">
+          {u.features.map((feature, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+              <input
+                type="text"
+                value={feature}
+                onChange={e => updateFeature(i, e.target.value)}
+                placeholder="Унікальна особливість або перевага бренду"
+                className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+              />
+              <button onClick={() => removeFeature(i)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addFeature}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати особливість
+          </button>
+        </div>
+      </div>
+
+      {/* Key message */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs">💬</span>
+          Ключовий меседж бренду
+        </h3>
+        <textarea
+          value={u.keyMessage}
+          onChange={e => save({ ...u, keyMessage: e.target.value })}
+          placeholder="Головний посил до аудиторії — одне речення, яке передає суть бренду..."
+          rows={3}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-violet-500/50 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+        />
+      </div>
+
+      {/* Insight */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">🔍</span>
+          Інсайт бренду
+        </h3>
+        <textarea
+          value={u.insight}
+          onChange={e => save({ ...u, insight: e.target.value })}
+          placeholder="Глибоке розуміння потреб аудиторії — що насправді хочуть чи відчувають клієнти..."
+          rows={3}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-emerald-500/50 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Brand Values form ───────────────────────────────────────────────────────
 
 interface BrandValue { id: string; title: string; description: string; translation: string }
@@ -1476,6 +1571,8 @@ export default function ProjectPage() {
                 <AnalyticsForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'competitorAnalysis' ? (
                 <CompetitorForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'uvp' ? (
+                <UvpForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'brandValues' ? (
                 <BrandValuesForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'brandArchetypes' ? (
