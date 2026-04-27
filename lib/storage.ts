@@ -1,6 +1,20 @@
-import { Project, ProjectData, EMPTY_PROJECT_DATA } from '@/types'
+import { Project, ProjectData, EMPTY_PROJECT_DATA, CalendarEvent } from '@/types'
 
 const STORAGE_KEY = 'smm_projects'
+const CALENDAR_KEY = 'smm_calendar_events'
+
+export function getCalendarEvents(): CalendarEvent[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(CALENDAR_KEY)
+    if (!raw) return []
+    return JSON.parse(raw)
+  } catch { return [] }
+}
+
+export function saveCalendarEvents(events: CalendarEvent[]): void {
+  localStorage.setItem(CALENDAR_KEY, JSON.stringify(events))
+}
 
 // Migrate old project data to current schema
 function migrateProject(p: Project): Project {

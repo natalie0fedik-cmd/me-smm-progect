@@ -1,3 +1,15 @@
+export type CalendarEventType = 'meeting' | 'planning' | 'shoot' | 'publish' | 'other'
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  date: string        // "YYYY-MM-DD"
+  time: string        // "HH:MM" or ""
+  type: CalendarEventType
+  projectId: string   // "" = no project
+  notes: string
+}
+
 export interface ProjectData {
   // 1. ХТО МИ — structured fields
   companyName: string
@@ -48,6 +60,9 @@ export interface ProjectData {
 
   // 11. ЕТАПИ РЕАЛІЗАЦІЇ
   implementationStages: string
+
+  // 12. АНАЛІТИКА / ЩОМІСЯЧНІ ЗВІТИ
+  monthlyReports: string
 }
 
 export interface Project {
@@ -89,4 +104,6 @@ export const EMPTY_PROJECT_DATA: ProjectData = {
   highlights: '',
   kpi: '',
   implementationStages: '',
+  monthlyReports: '',
 }
+

@@ -290,6 +290,22 @@ const GROUPS: GroupDef[] = [
       },
     ],
   },
+  {
+    id: 'analyticsGroup',
+    label: 'Аналітика',
+    number: '12',
+    icon: '📊',
+    tabs: [
+      {
+        id: 'monthlyReports',
+        label: 'Щомісячні звіти',
+        number: '12',
+        description: 'Фактичні показники кожного місяця vs план з KPI. Експорт у CSV.',
+        custom: true,
+        fields: ['monthlyReports'],
+      },
+    ],
+  },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -3008,6 +3024,179 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
   )
 }
 
+// ─── Monthly Reports form ────────────────────────────────────────────────────
+
+interface MonthlyReport {
+  id: string
+  month: string        // "YYYY-MM"
+  actuals: Record<string, string>  // kpi name → actual value
+  notes: string
+}
+
+function parseMonthlyReports(raw: string): MonthlyReport[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function exportCsv(kpiList: KpiMetric[], reports: MonthlyReport[], projectName: string) {
+  const headers = ['Місяць', ...kpiList.flatMap(k => [`${k.name} (план)`, `${k.name} (факт)`]), 'Нотатки']
+  const rows = reports.map(r => [
+    r.month,
+    ...kpiList.flatMap(k => [k.target, r.actuals[k.name] ?? '']),
+    r.notes,
+  ])
+  const csv = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${projectName.replace(/\s+/g, '_')}_analytics.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function MonthlyReportsForm({ data, updateField, projectName }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void; projectName: string }) {
+  const reports = parseMonthlyReports(data.monthlyReports)
+  const kpiList  = parseKpi(data.kpi)
+  function save(next: MonthlyReport[]) { updateField('monthlyReports', JSON.stringify(next)) }
+
+  function addMonth() {
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    if (reports.some(r => r.month === month)) return
+    save([{ id: crypto.randomUUID(), month, actuals: {}, notes: '' }, ...reports])
+  }
+
+  function updateActual(id: string, kpiName: string, value: string) {
+    save(reports.map(r => r.id === id ? { ...r, actuals: { ...r.actuals, [kpiName]: value } } : r))
+  }
+
+  function updateNotes(id: string, notes: string) {
+    save(reports.map(r => r.id === id ? { ...r, notes } : r))
+  }
+
+  function removeReport(id: string) {
+    save(reports.filter(r => r.id !== id))
+  }
+
+  function formatMonth(m: string) {
+    const [y, mo] = m.split('-')
+    const names = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
+    return `${names[parseInt(mo) - 1]} ${y}`
+  }
+
+  if (kpiList.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center space-y-3">
+        <p className="text-2xl">📊</p>
+        <p className="text-sm font-medium text-slate-300">Спочатку заповніть розділ КРІ (розділ 10)</p>
+        <p className="text-xs text-slate-500">Щомісячні звіти автоматично підтягнуть ваші KPI як «план» — вам залишиться лише вводити фактичні значення.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={addMonth}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+        >
+          <Plus size={14} /> Додати місяць
+        </button>
+        {reports.length > 0 && (
+          <button
+            onClick={() => exportCsv(kpiList, [...reports].reverse(), projectName)}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+          >
+            ⬇ Завантажити CSV
+          </button>
+        )}
+      </div>
+
+      {reports.length === 0 && (
+        <p className="text-xs text-slate-600 text-center py-4">Натисніть «Додати місяць» щоб почати вносити фактичні дані</p>
+      )}
+
+      {/* Reports */}
+      {reports.map(report => (
+        <div key={report.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          {/* Month header */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/60">
+            <span className="text-sm font-bold text-white">{formatMonth(report.month)}</span>
+            <input
+              type="month"
+              value={report.month}
+              onChange={e => {
+                if (!reports.some(r => r.id !== report.id && r.month === e.target.value)) {
+                  save(reports.map(r => r.id === report.id ? { ...r, month: e.target.value } : r))
+                }
+              }}
+              className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-xs text-slate-400 outline-none transition-colors ml-1"
+            />
+            <button onClick={() => removeReport(report.id)} className="ml-auto text-slate-600 hover:text-red-400 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* KPI plan vs fact table */}
+          <div className="p-4">
+            <div className="grid grid-cols-[1fr_120px_120px] gap-x-3 gap-y-2">
+              {/* Header row */}
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Показник</div>
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">План</div>
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Факт</div>
+
+              {/* KPI rows */}
+              {kpiList.map(kpi => {
+                const fact = report.actuals[kpi.name] ?? ''
+                const hasFact = fact.trim().length > 0
+                return (
+                  <>
+                    <div key={kpi.id} className="flex items-center text-sm text-slate-300 min-w-0">
+                      <span className="truncate">{kpi.name}</span>
+                      <span className="ml-1.5 text-xs text-slate-600 flex-shrink-0">{kpi.period}</span>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <span className="text-xs text-slate-500 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-center w-full">{kpi.target}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={fact}
+                      onChange={e => updateActual(report.id, kpi.name, e.target.value)}
+                      placeholder="Введіть..."
+                      className="bg-slate-800 border focus:outline-none rounded-lg px-2 py-1.5 text-xs text-center transition-colors"
+                      style={{
+                        borderColor: hasFact ? 'rgba(16,185,129,0.5)' : 'rgba(51,65,85,1)',
+                        color: hasFact ? '#6ee7b7' : '#94a3b8',
+                      }}
+                    />
+                  </>
+                )
+              })}
+            </div>
+
+            {/* Notes */}
+            <div className="mt-4 pt-3 border-t border-slate-700/50">
+              <label className="text-xs text-slate-600 tracking-wider mb-1.5 block">Нотатки до місяця</label>
+              <textarea
+                value={report.notes}
+                onChange={e => updateNotes(report.id, e.target.value)}
+                placeholder="Що вплинуло на результати, що змінити наступного місяця..."
+                rows={2}
+                className="w-full bg-transparent text-slate-300 placeholder-slate-700 text-sm outline-none resize-none"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -3353,6 +3542,8 @@ export default function ProjectPage() {
                 <KpiForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'implementationStages' ? (
                 <RoadmapForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'monthlyReports' ? (
+                <MonthlyReportsForm data={project.data} updateField={updateField} projectName={project.name} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
