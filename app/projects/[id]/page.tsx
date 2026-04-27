@@ -309,7 +309,7 @@ interface FieldProps {
 function Field({ label, placeholder, value, onChange, multiline }: FieldProps) {
   return (
     <div className="group">
-      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+      <label className="block text-xs font-semibold text-slate-400 tracking-wider mb-1.5">
         {label}
       </label>
       {multiline ? (
@@ -477,7 +477,7 @@ function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: 
                 </button>
               </div>
               <div>
-                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+                <label className="text-xs text-slate-500 tracking-wider mb-1 block">Опис</label>
                 <textarea
                   value={goal.description}
                   onChange={(e) => updateStrategic(goal.id, 'description', e.target.value)}
@@ -487,7 +487,7 @@ function GoalsForm({ data, updateField }: { data: ProjectData; updateField: (f: 
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Метрики успіху</label>
+                <label className="text-xs text-slate-500 tracking-wider mb-1 block">Метрики успіху</label>
                 <input
                   type="text"
                   value={goal.metrics}
@@ -858,7 +858,7 @@ function CompetitorForm({ data, updateField }: { data: ProjectData; updateField:
             {/* Strengths / Weaknesses */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 block">
+                <label className="text-xs font-semibold text-emerald-400 tracking-wider mb-1.5 flex items-center gap-1 block">
                   <span>✅</span> Сильні сторони
                 </label>
                 <textarea
@@ -870,7 +870,7 @@ function CompetitorForm({ data, updateField }: { data: ProjectData; updateField:
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5 flex items-center gap-1 block">
+                <label className="text-xs font-semibold text-red-400 tracking-wider mb-1.5 flex items-center gap-1 block">
                   <span>❌</span> Слабкі сторони
                 </label>
                 <textarea
@@ -928,7 +928,7 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
 
   const metric = (label: string, key: keyof AnalyticsData, placeholder: string, hint?: string) => (
     <div>
-      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">{label}</label>
+      <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1 block">{label}</label>
       <div className="relative">
         <input
           type="text"
@@ -968,7 +968,7 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
         </h3>
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Інтереси аудиторії</label>
+            <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1 block">Інтереси аудиторії</label>
             <textarea
               value={a.interests}
               onChange={e => save({ ...a, interests: e.target.value })}
@@ -978,7 +978,7 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Дохід / платоспроможність</label>
+            <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1 block">Дохід / платоспроможність</label>
             <input
               type="text"
               value={a.income}
@@ -1052,7 +1052,7 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-10">
                 {([['demographics', 'Демографія', 'Жінка, 28 р., Київ'], ['profession', 'Професія', 'Маркетолог'], ['needs', 'Потреби', 'Економія часу, якість...'], ['pains', 'Болі', 'Не вистачає часу, дорого...']] as [keyof BrandChampion, string, string][]).map(([field, label, ph]) => (
                   <div key={field}>
-                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">{label}</label>
+                    <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
                     <input
                       type="text"
                       value={c[field] as string}
@@ -1190,7 +1190,7 @@ function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: ke
               {/* Fields */}
               <div className="p-4 space-y-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1.5 block flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" /> Що робимо
                   </label>
                   <input
@@ -1202,7 +1202,7 @@ function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: ke
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1.5 block">
                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block mr-1.5" /> Чим відрізняємось
                   </label>
                   <input
@@ -1214,7 +1214,7 @@ function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: ke
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  <label className="text-xs font-semibold text-slate-400 tracking-wider mb-1.5 block">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5" /> Доказ
                   </label>
                   <input
@@ -1343,7 +1343,7 @@ function BrandValuesForm({ data, updateField }: { data: ProjectData; updateField
           </div>
           <div className="p-4 space-y-3">
             <div>
-              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+              <label className="text-xs text-slate-500 tracking-wider mb-1 block">Опис</label>
               <textarea
                 value={v.description}
                 onChange={e => update(v.id, 'description', e.target.value)}
@@ -1353,7 +1353,7 @@ function BrandValuesForm({ data, updateField }: { data: ProjectData; updateField
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Як транслюємо</label>
+              <label className="text-xs text-slate-500 tracking-wider mb-1 block">Як транслюємо</label>
               <textarea
                 value={v.translation}
                 onChange={e => update(v.id, 'translation', e.target.value)}
@@ -1411,7 +1411,7 @@ function BrandArchetypesForm({ data, updateField }: { data: ProjectData; updateF
       </div>
       <div className="p-4 space-y-3">
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Назва архетипу</label>
+          <label className="text-xs text-slate-500 tracking-wider mb-1 block">Назва архетипу</label>
           <input
             type="text"
             value={a[key].name}
@@ -1421,7 +1421,7 @@ function BrandArchetypesForm({ data, updateField }: { data: ProjectData; updateF
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+          <label className="text-xs text-slate-500 tracking-wider mb-1 block">Опис</label>
           <textarea
             value={a[key].description}
             onChange={e => updateEntry(key, 'description', e.target.value)}
@@ -1432,7 +1432,7 @@ function BrandArchetypesForm({ data, updateField }: { data: ProjectData; updateF
         </div>
         {key === 'primary' && (
           <div>
-            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Слова-маячки</label>
+            <label className="text-xs text-slate-500 tracking-wider mb-1 block">Слова-маячки</label>
             <input
               type="text"
               value={a[key].keywords}
@@ -1603,7 +1603,7 @@ function CommunicationPillarsForm({ data, updateField }: { data: ProjectData; up
             </button>
           </div>
           <div className="pl-9">
-            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">Опис</label>
+            <label className="text-xs text-slate-500 tracking-wider mb-1 block">Опис</label>
             <textarea
               value={p.description}
               onChange={e => update(p.id, 'description', e.target.value)}
@@ -1686,7 +1686,7 @@ function ToneOfVoiceForm({ data, updateField }: { data: ProjectData; updateField
       </div>
 
       <div>
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Додаткові нотатки</label>
+        <label className="text-xs font-semibold text-slate-400 tracking-wider mb-2 block">Додаткові нотатки</label>
         <textarea
           value={t.notes}
           onChange={e => save({ ...t, notes: e.target.value })}
@@ -1783,7 +1783,7 @@ function ContentRubricatorForm({ data, updateField }: { data: ProjectData; updat
               ['goal',      'Мета',    'Залучення, продажі...'],
             ] as [keyof ContentRubric, string, string][]).map(([field, label, ph]) => (
               <div key={field}>
-                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">{label}</label>
+                <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
                 <input
                   type="text"
                   value={r[field] as string}
@@ -1839,7 +1839,7 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
     <div className="space-y-6">
       {/* Style */}
       <div>
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Стиль</label>
+        <label className="text-xs font-semibold text-slate-400 tracking-wider mb-3 block">Стиль</label>
         <div className="flex flex-wrap gap-2">
           {STYLE_OPTIONS.map(s => (
             <button
@@ -1868,7 +1868,7 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
 
       {/* Colors */}
       <div className="border-t border-slate-700/50 pt-5">
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Кольорова гама</label>
+        <label className="text-xs font-semibold text-slate-400 tracking-wider mb-3 block">Кольорова гама</label>
         <div className="grid grid-cols-3 gap-4">
           {([
             ['colorMain',      'Основний'],
@@ -1893,7 +1893,7 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
 
       {/* Fonts */}
       <div className="border-t border-slate-700/50 pt-5">
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Шрифти</label>
+        <label className="text-xs font-semibold text-slate-400 tracking-wider mb-3 block">Шрифти</label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Заголовки</label>
@@ -1920,7 +1920,7 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
 
       {/* References */}
       <div className="border-t border-slate-700/50 pt-5">
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Референси</label>
+        <label className="text-xs font-semibold text-slate-400 tracking-wider mb-2 block">Референси</label>
         <textarea
           value={v.references}
           onChange={e => save({ ...v, references: e.target.value })}
