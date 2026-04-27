@@ -2558,25 +2558,121 @@ function parseKpi(raw: string): KpiMetric[] {
 }
 
 const KPI_EXAMPLES: KpiMetric[] = [
-  { id: '', name: 'Підписники',          target: '+500 / місяць',  current: '',  period: 'Щомісяця' },
+  { id: '', name: 'Підписники',          target: '+500 / місяць',   current: '', period: 'Щомісяця' },
   { id: '', name: 'Охоплення',           target: '50 000 / місяць', current: '', period: 'Щомісяця' },
   { id: '', name: 'ER (залученість)',     target: 'від 3%',          current: '', period: 'По кожному посту' },
-  { id: '', name: 'Трафік на сайт',       target: '1 000 кліків',   current: '',  period: 'Щомісяця' },
-  { id: '', name: 'Конверсія в продажі',  target: 'від 2%',          current: '', period: 'Щомісяця' },
-  { id: '', name: 'Вартість підписника',  target: 'до 30 грн',       current: '', period: 'На рекламну кампанію' },
+  { id: '', name: 'Трафік на сайт',      target: '1 000 кліків',    current: '', period: 'Щомісяця' },
+  { id: '', name: 'Конверсія в продажі', target: 'від 2%',          current: '', period: 'Щомісяця' },
+  { id: '', name: 'Вартість підписника', target: 'до 30 грн',       current: '', period: 'На рекламну кампанію' },
 ]
+
+const GOAL_KPI_MAP: { keywords: string[]; kpis: Array<Omit<KpiMetric, 'id' | 'current'>> }[] = [
+  {
+    keywords: ['продаж', 'виручк', 'дохід', 'конверс', 'монетиз'],
+    kpis: [
+      { name: 'Конверсія в продажі', target: 'від 2%',       period: 'Щомісяця' },
+      { name: 'Трафік на сайт',      target: '1 000 кліків', period: 'Щомісяця' },
+      { name: 'Вартість ліда',       target: 'до 150 грн',   period: 'На кампанію' },
+    ],
+  },
+  {
+    keywords: ['впізнаван', 'охоплення', 'awareness', 'видимість', 'відомост'],
+    kpis: [
+      { name: 'Охоплення',  target: '50 000 / місяць',  period: 'Щомісяця' },
+      { name: 'Покази',     target: '200 000 / місяць', period: 'Щомісяця' },
+      { name: 'Підписники', target: '+500 / місяць',    period: 'Щомісяця' },
+    ],
+  },
+  {
+    keywords: ['спільнот', 'лояльн', 'залученість', 'engagement', 'ком\'юніті', 'ком’юніті'],
+    kpis: [
+      { name: 'ER (залученість)', target: 'від 3%',       period: 'По кожному посту' },
+      { name: 'Коментарі',        target: 'від 20 / пост', period: 'По кожному посту' },
+      { name: 'Підписники',       target: '+300 / місяць', period: 'Щомісяця' },
+    ],
+  },
+  {
+    keywords: ['трафік', 'сайт', 'перехід', 'клік'],
+    kpis: [
+      { name: 'Трафік на сайт',           target: '1 000 кліків', period: 'Щомісяця' },
+      { name: 'CTR (кліки по посиланню)', target: 'від 1%',       period: 'По кожному посту' },
+    ],
+  },
+  {
+    keywords: ['підписник', 'аудиторі', 'ріст', 'зростання'],
+    kpis: [
+      { name: 'Підписники',        target: '+500 / місяць', period: 'Щомісяця' },
+      { name: 'Вартість підписника', target: 'до 30 грн',  period: 'На кампанію' },
+      { name: 'Охоплення',         target: '30 000 / місяць', period: 'Щомісяця' },
+    ],
+  },
+]
+
+function getGoalKpis(title: string): Array<Omit<KpiMetric, 'id' | 'current'>> {
+  const lower = title.toLowerCase()
+  for (const { keywords, kpis } of GOAL_KPI_MAP) {
+    if (keywords.some(kw => lower.includes(kw))) return kpis
+  }
+  return []
+}
 
 function KpiForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const list = parseKpi(data.kpi)
+  const strategicGoals = parseGoals(data.goals).strategic.filter(g => g.title.trim())
   function save(next: KpiMetric[]) { updateField('kpi', JSON.stringify(next)) }
   function add() { save([...list, { id: crypto.randomUUID(), name: '', target: '', current: '', period: '' }]) }
   function remove(id: string) { save(list.filter(k => k.id !== id)) }
   function update(id: string, field: keyof KpiMetric, value: string) {
     save(list.map(k => k.id === id ? { ...k, [field]: value } : k))
   }
+  function addKpi(kpi: Omit<KpiMetric, 'id' | 'current'>) {
+    if (!list.some(k => k.name.toLowerCase() === kpi.name.toLowerCase())) {
+      save([...list, { ...kpi, id: crypto.randomUUID(), current: '' }])
+    }
+  }
+
+  const goalHints = strategicGoals
+    .map(g => ({ goal: g, kpis: getGoalKpis(g.title) }))
+    .filter(h => h.kpis.length > 0)
 
   return (
     <div className="space-y-4">
+
+      {/* Goal-linked KPI hints */}
+      {goalHints.length > 0 && (
+        <div className="space-y-2">
+          {goalHints.map(({ goal, kpis }) => (
+            <div key={goal.id} className="px-4 py-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs">🎯</span>
+                <span className="text-xs font-medium text-indigo-400">Ціль: {goal.title}</span>
+                <span className="text-xs text-slate-600 mx-0.5">→</span>
+                <span className="text-xs text-slate-500">рекомендовані КРІ:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {kpis.map(kpi => {
+                  const added = list.some(k => k.name.toLowerCase() === kpi.name.toLowerCase())
+                  return (
+                    <button
+                      key={kpi.name}
+                      onClick={() => addKpi(kpi)}
+                      disabled={added}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all border ${
+                        added
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 cursor-default'
+                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-indigo-500/40 hover:text-indigo-300 cursor-pointer'
+                      }`}
+                    >
+                      {added ? '✓ ' : '+ '}{kpi.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {list.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
           <div className="space-y-1">
