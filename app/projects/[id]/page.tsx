@@ -553,6 +553,7 @@ interface Task {
   priority: TaskPriority
   status: TaskStatus
   assignee: string
+  goalId: string
 }
 
 interface TasksData { tasks: Task[] }
@@ -580,11 +581,12 @@ function parseTasksList(raw: string): TasksData {
 
 function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const td = parseTasksList(data.tasks)
+  const strategicGoals = parseGoals(data.goals).strategic.filter(g => g.title.trim())
 
   function save(next: TasksData) { updateField('tasks', JSON.stringify(next)) }
 
   function addTask() {
-    const newTask: Task = { id: crypto.randomUUID(), title: '', deadline: '', priority: 'medium', status: 'planned', assignee: '' }
+    const newTask: Task = { id: crypto.randomUUID(), title: '', deadline: '', priority: 'medium', status: 'planned', assignee: '', goalId: '' }
     save({ tasks: [...td.tasks, newTask] })
   }
   function removeTask(id: string) { save({ tasks: td.tasks.filter((t) => t.id !== id) }) }
@@ -629,7 +631,7 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
               <button
                 key={title}
                 onClick={() => {
-                  const t: Task = { id: crypto.randomUUID(), title, deadline: '', priority, status: 'planned', assignee: '' }
+                  const t: Task = { id: crypto.randomUUID(), title, deadline: '', priority, status: 'planned', assignee: '', goalId: '' }
                   save({ tasks: [...td.tasks, t] })
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg transition-all text-left group"
@@ -674,15 +676,25 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
                 </span>
               </button>
 
-              <input
-                type="text"
-                value={task.title}
-                onChange={(e) => updateTask(task.id, 'title', e.target.value)}
-                placeholder="Назва задачі"
-                className={`flex-1 bg-transparent text-sm placeholder-slate-600 outline-none transition-colors ${
-                  task.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-100'
-                }`}
-              />
+              <div className="flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={task.title}
+                  onChange={(e) => updateTask(task.id, 'title', e.target.value)}
+                  placeholder="Назва задачі"
+                  className={`w-full bg-transparent text-sm placeholder-slate-600 outline-none transition-colors ${
+                    task.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-100'
+                  }`}
+                />
+                {task.goalId && (() => {
+                  const linked = strategicGoals.find(g => g.id === task.goalId)
+                  return linked ? (
+                    <span className="inline-flex items-center gap-1 mt-1 text-xs text-indigo-400/70">
+                      <span>🎯</span> {linked.title}
+                    </span>
+                  ) : null
+                })()}
+              </div>
               <button onClick={() => removeTask(task.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5">
                 <X size={13} />
               </button>
@@ -731,6 +743,22 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
                 placeholder="👤 Відповідальний"
                 className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs text-slate-300 placeholder-slate-600 transition-colors"
               />
+
+              {/* Linked goal */}
+              {strategicGoals.length > 0 && (
+                <select
+                  value={task.goalId ?? ''}
+                  onChange={(e) => updateTask(task.id, 'goalId', e.target.value)}
+                  className={`bg-slate-800 border rounded-lg px-2 py-1 text-xs transition-colors outline-none cursor-pointer max-w-[180px] truncate ${
+                    task.goalId ? 'border-indigo-500/50 text-indigo-300' : 'border-slate-700 text-slate-500'
+                  }`}
+                >
+                  <option value="">🎯 Ціль...</option>
+                  {strategicGoals.map((g, i) => (
+                    <option key={g.id} value={g.id}>{g.title || `Ціль ${i + 1}`}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
         ))}
