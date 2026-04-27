@@ -2429,9 +2429,63 @@ function HighlightsForm({ data, updateField }: { data: ProjectData; updateField:
   function update(id: string, field: keyof Highlight, value: string) {
     save(list.map(h => h.id === id ? { ...h, [field]: value } : h))
   }
+  function addExample(ex: Highlight) {
+    if (!list.some(h => h.name === ex.name)) {
+      save([...list, { ...ex, id: crypto.randomUUID() }])
+    }
+  }
 
   return (
     <div className="space-y-4">
+
+      {/* Template picker — always visible */}
+      <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-700/60 flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Популярні хайлайти</span>
+          <span className="text-xs text-slate-600">Клікніть щоб додати</span>
+        </div>
+        <div className="divide-y divide-slate-700/40">
+          {HIGHLIGHT_EXAMPLES.map(ex => {
+            const added = list.some(h => h.name === ex.name)
+            return (
+              <button
+                key={ex.name}
+                onClick={() => addExample(ex)}
+                disabled={added}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all ${
+                  added ? 'cursor-default opacity-60' : 'hover:bg-slate-800/60 cursor-pointer'
+                }`}
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-base flex-shrink-0 border-2 transition-all"
+                  style={added
+                    ? { borderColor: 'rgba(16,185,129,0.5)', backgroundColor: 'rgba(16,185,129,0.1)', color: '#10b981' }
+                    : { borderColor: 'rgba(100,116,139,0.5)', backgroundColor: 'rgba(30,41,59,0.8)' }}
+                >
+                  {added ? <Check size={14} color="#10b981" /> : ex.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${added ? 'text-emerald-400' : 'text-slate-300'}`}>{ex.name}</p>
+                  <p className="text-xs text-slate-600 truncate">{ex.content}</p>
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-1.5">
+                  <span className="text-xs text-slate-600">{ex.updateFrequency}</span>
+                  {added
+                    ? <span className="text-xs font-medium text-emerald-500 ml-1">Додано</span>
+                    : <span className="w-6 h-6 rounded-md bg-slate-700 hover:bg-indigo-600 flex items-center justify-center transition-colors ml-1"><Plus size={12} className="text-slate-400" /></span>
+                  }
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Empty hint */}
+      {list.length === 0 && (
+        <p className="text-xs text-slate-600 text-center">Або додайте власний хайлайт нижче</p>
+      )}
+
       {/* Circle preview row */}
       {list.length > 0 && (
         <div className="flex flex-wrap gap-3 pb-4 border-b border-slate-700/50">
@@ -2452,42 +2506,7 @@ function HighlightsForm({ data, updateField }: { data: ProjectData; updateField:
         </div>
       )}
 
-      {/* Empty state */}
-      {list.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-300">Які хайлайти потрібні профілю?</p>
-            <p className="text-xs text-slate-500">Хайлайти — це постійні розділи профілю. 4–6 хайлайтів дають новому відвідувачу повну картину бренду за 10 секунд.</p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Популярні хайлайти</p>
-            {HIGHLIGHT_EXAMPLES.map(ex => (
-              <button
-                key={ex.name}
-                onClick={() => save([...list, { ...ex, id: crypto.randomUUID() }])}
-                className="w-full flex items-center gap-3 p-3 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all group"
-              >
-                <div className="w-10 h-10 rounded-full border-2 border-slate-600 group-hover:border-indigo-500/50 bg-slate-700 flex items-center justify-center text-lg flex-shrink-0 transition-colors">
-                  {ex.icon}
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">{ex.name}</p>
-                  <p className="text-xs text-slate-500">{ex.content}</p>
-                </div>
-                <span className="text-xs text-slate-600 flex-shrink-0">{ex.updateFrequency}</span>
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={add}
-            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
-          >
-            <Plus size={14} /> Додати власний хайлайт
-          </button>
-        </div>
-      )}
-
-      {/* List */}
+      {/* Editable list */}
       {list.map((h, i) => (
         <div key={h.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
