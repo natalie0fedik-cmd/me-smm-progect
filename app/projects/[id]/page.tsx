@@ -1624,15 +1624,15 @@ function ToneToggle({ label, options, value, onChange }: { label: string; option
   return (
     <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-700/40 last:border-0">
       <span className="text-sm text-slate-300 font-medium min-w-0">{label}</span>
-      <div className="flex gap-1 flex-shrink-0">
-        {options.map(([val, text]) => (
+      <div className="flex rounded-lg overflow-hidden border border-slate-700 flex-shrink-0">
+        {options.map(([val, text], i) => (
           <button
             key={val}
             onClick={() => onChange(value === val ? '' : val)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            className={`px-4 py-1.5 text-xs font-medium transition-all ${i > 0 ? 'border-l border-slate-700' : ''} ${
               value === val
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
           >
             {text}
