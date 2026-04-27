@@ -39,7 +39,7 @@ interface GroupDef {
 const GROUPS: GroupDef[] = [
   {
     id: 'basics',
-    label: 'Основи',
+    label: 'Профіль бренду',
     number: '1–3',
     icon: '📋',
     tabs: [
@@ -71,7 +71,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'analytics',
-    label: 'Аналітика',
+    label: 'Аудиторія',
     number: '4',
     icon: '📊',
     tabs: [
@@ -95,7 +95,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'positioning',
-    label: 'Позиціювання',
+    label: 'ДНК бренду',
     number: '5',
     icon: '🎯',
     tabs: [
@@ -149,7 +149,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'uvp',
-    label: 'УЦП',
+    label: 'Унікальність',
     number: '6',
     icon: '💎',
     tabs: [
@@ -165,7 +165,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'content',
-    label: 'Контент-стратегія',
+    label: 'Голос і контент',
     number: '7',
     icon: '✍️',
     tabs: [
@@ -233,7 +233,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'bio',
-    label: 'БІО та Highlights',
+    label: 'Оформлення профілю',
     number: '9',
     icon: '👤',
     tabs: [
@@ -270,7 +270,7 @@ const GROUPS: GroupDef[] = [
   },
   {
     id: 'stages',
-    label: 'Етапи реалізації',
+    label: 'План дій',
     number: '11',
     icon: '🗓️',
     tabs: [
