@@ -561,6 +561,7 @@ interface Task {
   status: TaskStatus
   assignee: string
   goalId: string
+  stageIndex: string  // '' | '0' | '1' | '2' | '3'
 }
 
 interface TasksData { tasks: Task[] }
@@ -581,8 +582,10 @@ function parseTasksList(raw: string): TasksData {
   if (!raw) return { tasks: [] }
   try {
     const parsed = JSON.parse(raw)
-    if (parsed && Array.isArray(parsed.tasks)) return parsed
-    return { tasks: [] } // handles old { groups: [...] } format
+    if (parsed && Array.isArray(parsed.tasks)) {
+      return { tasks: parsed.tasks.map((t: Task) => ({ ...t, stageIndex: t.stageIndex ?? '' })) }
+    }
+    return { tasks: [] }
   } catch { return { tasks: [] } }
 }
 
@@ -593,7 +596,7 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
   function save(next: TasksData) { updateField('tasks', JSON.stringify(next)) }
 
   function addTask() {
-    const newTask: Task = { id: crypto.randomUUID(), title: '', deadline: '', priority: 'medium', status: 'planned', assignee: '', goalId: '' }
+    const newTask: Task = { id: crypto.randomUUID(), title: '', deadline: '', priority: 'medium', status: 'planned', assignee: '', goalId: '', stageIndex: '' }
     save({ tasks: [...td.tasks, newTask] })
   }
   function removeTask(id: string) { save({ tasks: td.tasks.filter((t) => t.id !== id) }) }
@@ -638,7 +641,7 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
               <button
                 key={title}
                 onClick={() => {
-                  const t: Task = { id: crypto.randomUUID(), title, deadline: '', priority, status: 'planned', assignee: '', goalId: '' }
+                  const t: Task = { id: crypto.randomUUID(), title, deadline: '', priority, status: 'planned', assignee: '', goalId: '', stageIndex: '' }
                   save({ tasks: [...td.tasks, t] })
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg transition-all text-left group"
@@ -766,6 +769,20 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
                   ))}
                 </select>
               )}
+
+              {/* Linked stage */}
+              <select
+                value={task.stageIndex ?? ''}
+                onChange={(e) => updateTask(task.id, 'stageIndex', e.target.value)}
+                className={`bg-slate-800 border rounded-lg px-2 py-1 text-xs transition-colors outline-none cursor-pointer ${
+                  task.stageIndex ? 'border-amber-500/40 text-amber-300' : 'border-slate-700 text-slate-500'
+                }`}
+              >
+                <option value="">📋 Етап...</option>
+                {ROADMAP_STAGES.map((s, i) => (
+                  <option key={i} value={String(i)}>{s.icon} {s.label}</option>
+                ))}
+              </select>
             </div>
           </div>
         ))}
@@ -2875,6 +2892,7 @@ function parseRoadmap(raw: string): RoadmapData {
 
 function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const d = parseRoadmap(data.implementationStages)
+  const allTasks = parseTasksList(data.tasks).tasks
   function save(next: RoadmapData) { updateField('implementationStages', JSON.stringify(next)) }
   function updateStage(i: number, field: keyof RoadmapStage, value: string) {
     const stages = d.stages.map((s, idx) => idx === i ? { ...s, [field]: value } : s)
@@ -2904,6 +2922,8 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
       {ROADMAP_STAGES.map((def, i) => {
         const stage = d.stages[i]
         const sc = ROADMAP_STATUS[stage.status]
+        const linkedTasks = allTasks.filter(t => t.stageIndex === String(i))
+        const linkedDone = linkedTasks.filter(t => t.status === 'done').length
         return (
           <div
             key={i}
@@ -2935,6 +2955,12 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
                 <span className="ml-2 text-xs" style={{ color: sc.textColor }}>{sc.label}</span>
               </div>
 
+              {linkedTasks.length > 0 && (
+                <span className="text-xs flex-shrink-0" style={{ color: linkedDone === linkedTasks.length ? '#10b981' : '#94a3b8' }}>
+                  {linkedDone}/{linkedTasks.length} задач
+                </span>
+              )}
+
               <input
                 type="date"
                 value={stage.deadline}
@@ -2953,6 +2979,28 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
                 className="w-full bg-transparent text-slate-100 placeholder-slate-600 text-sm leading-relaxed outline-none resize-none"
               />
             </div>
+
+            {/* Linked tasks from section 1 */}
+            {linkedTasks.length > 0 && (
+              <div className="px-4 py-3 space-y-1.5" style={{ borderTop: `1px solid ${def.cardBorder}`, backgroundColor: 'rgba(15,23,42,0.4)' }}>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Задачі з розділу «Задачі»</p>
+                {linkedTasks.map(task => {
+                  const dotColor = task.status === 'done' ? '#10b981' : task.status === 'inprogress' ? '#f59e0b' : '#64748b'
+                  return (
+                    <div key={task.id} className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
+                      <span
+                        className="text-xs flex-1 min-w-0 truncate"
+                        style={{ color: task.status === 'done' ? '#475569' : '#cbd5e1', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}
+                      >
+                        {task.title || '(без назви)'}
+                      </span>
+                      {task.deadline && <span className="text-xs flex-shrink-0" style={{ color: '#475569' }}>{task.deadline}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )
       })}
