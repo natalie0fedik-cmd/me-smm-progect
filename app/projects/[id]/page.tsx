@@ -1206,32 +1206,64 @@ function BrandEnemiesForm({ data, updateField }: { data: ProjectData; updateFiel
   function remove(i: number) { save(list.filter((_, idx) => idx !== i)) }
   function update(i: number, value: string) { const n = [...list]; n[i] = value; save(n) }
 
+  const ENEMIES_EXAMPLES = ['Халтура і дешевизна', 'Обман клієнтів', 'Безликий контент', 'Нерівність і упередження', 'Маніпуляція страхом']
+
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500 italic">Що бренд відкидає та чому протистоїть (халтура, обман, нерівність...)</p>
-      <div className="space-y-2">
-        {list.map((enemy, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-red-400 flex-shrink-0 text-sm">✕</span>
-            <input
-              type="text"
-              value={enemy}
-              onChange={e => update(i, e.target.value)}
-              placeholder="Ворог бренду..."
-              className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-red-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
-            />
-            <button onClick={() => remove(i)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
-              <X size={14} />
-            </button>
+      {list.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Проти чого виступає бренд?</p>
+            <p className="text-xs text-slate-500">Ворог бренду — це не конкурент, а явище або поведінка, яку бренд публічно відкидає. Це загострює позиціювання і притягує однодумців.</p>
           </div>
-        ))}
-      </div>
-      <button
-        onClick={add}
-        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-red-500/40 rounded-xl text-slate-500 hover:text-red-400 text-sm transition-all flex items-center justify-center gap-2"
-      >
-        <Plus size={14} /> Додати ворога бренду
-      </button>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади</p>
+            <div className="flex flex-wrap gap-2">
+              {ENEMIES_EXAMPLES.map(ex => (
+                <button
+                  key={ex}
+                  onClick={() => save([...list, ex])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/40 rounded-lg text-xs text-slate-400 hover:text-red-300 transition-all"
+                >
+                  <span className="text-red-500/60">✕</span> {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати свого ворога
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {list.map((enemy, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-red-400 flex-shrink-0 text-sm">✕</span>
+                <input
+                  type="text"
+                  value={enemy}
+                  onChange={e => update(i, e.target.value)}
+                  placeholder="Ворог бренду..."
+                  className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-red-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                />
+                <button onClick={() => remove(i)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-red-500/40 rounded-xl text-slate-500 hover:text-red-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати ворога бренду
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -1254,8 +1286,45 @@ function CommunicationPillarsForm({ data, updateField }: { data: ProjectData; up
     save(list.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
+  const PILLARS_EXAMPLES: Array<{ topic: string; description: string }> = [
+    { topic: 'Експертиза', description: 'Корисний контент, кейси, навчальні пости, відповіді на питання аудиторії' },
+    { topic: 'За лаштунками', description: 'Команда, процеси, щоденне життя бренду — що робить нас живими' },
+    { topic: 'Клієнти і результати', description: 'Відгуки, трансформації, до/після, реальні історії' },
+    { topic: 'Цінності бренду', description: 'Позиція бренду з важливих тем, те що нас об\'єднує з аудиторією' },
+  ]
+
   return (
     <div className="space-y-4">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Навколо яких тем будується контент?</p>
+            <p className="text-xs text-slate-500">Кити — це 3–5 постійних тематичних напрямків. Вони дають структуру контент-плану і роблять акаунт впізнаваним.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади</p>
+            {PILLARS_EXAMPLES.map((ex, i) => (
+              <button
+                key={i}
+                onClick={() => save([...list, { id: crypto.randomUUID(), topic: ex.topic, description: ex.description }])}
+                className="w-full text-left p-3 bg-slate-800 hover:bg-emerald-500/5 border border-slate-700 hover:border-emerald-500/30 rounded-lg transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                  <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">{ex.topic}</span>
+                </div>
+                <p className="text-xs text-slate-500 pl-6">{ex.description}</p>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власний кит
+          </button>
+        </div>
+      )}
       {list.map((p, i) => (
         <div key={p.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-3">
@@ -1283,12 +1352,14 @@ function CommunicationPillarsForm({ data, updateField }: { data: ProjectData; up
           </div>
         </div>
       ))}
-      <button
-        onClick={add}
-        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl text-slate-500 hover:text-emerald-400 text-sm transition-all flex items-center justify-center gap-2"
-      >
-        <Plus size={14} /> Додати кит комунікації
-      </button>
+      {list.length > 0 && (
+        <button
+          onClick={add}
+          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl text-slate-500 hover:text-emerald-400 text-sm transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Додати кит комунікації
+        </button>
+      )}
     </div>
   )
 }
