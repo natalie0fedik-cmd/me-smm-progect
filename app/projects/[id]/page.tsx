@@ -213,21 +213,24 @@ const GROUPS: GroupDef[] = [
         label: 'Платні',
         number: '8.1',
         description: 'Таргетована реклама, інфлюенсер-маркетинг, платні розміщення',
-        placeholder: '— Facebook/Instagram Ads: ...\n— Google Ads: ...\n— Інфлюенсери: ...\n— Бюджет: ...',
+        custom: true,
+        fields: ['paidTools'],
       },
       {
         id: 'organicTools',
         label: 'Органічні',
         number: '8.2',
         description: 'SEO, колаборації, UGC, хештеги, взаємодія з аудиторією',
-        placeholder: '— Хештег-стратегія: ...\n— Колаборації: ...\n— UGC: ...\n— Активність у коментарях: ...',
+        custom: true,
+        fields: ['organicTools'],
       },
       {
         id: 'salesFunnels',
         label: 'Воронки',
         number: '8.3',
         description: 'Шлях клієнта від першого дотику до конверсії',
-        placeholder: 'Воронка 1:\nУсвідомлення → Інтерес → Бажання → Дія\n1. ...\n2. ...\n3. ...',
+        custom: true,
+        fields: ['salesFunnels'],
       },
     ],
   },
@@ -1933,6 +1936,297 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
   )
 }
 
+// ─── Paid Tools form ─────────────────────────────────────────────────────────
+
+interface TargetedAd { id: string; segment: string; message: string; creative: string; budget: string; kpi: string }
+interface Influencer  { id: string; category: string; format: string; budget: string }
+interface PaidToolsData { ads: TargetedAd[]; influencers: Influencer[] }
+
+const EMPTY_PAID: PaidToolsData = { ads: [], influencers: [] }
+
+function parsePaidTools(raw: string): PaidToolsData {
+  if (!raw) return JSON.parse(JSON.stringify(EMPTY_PAID))
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_PAID))
+    return {
+      ads:         Array.isArray(p.ads)         ? p.ads         : [],
+      influencers: Array.isArray(p.influencers) ? p.influencers : [],
+    }
+  } catch { return JSON.parse(JSON.stringify(EMPTY_PAID)) }
+}
+
+function PaidToolsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const d = parsePaidTools(data.paidTools)
+  function save(next: PaidToolsData) { updateField('paidTools', JSON.stringify(next)) }
+
+  function addAd() { save({ ...d, ads: [...d.ads, { id: crypto.randomUUID(), segment: '', message: '', creative: '', budget: '', kpi: '' }] }) }
+  function removeAd(id: string) { save({ ...d, ads: d.ads.filter(a => a.id !== id) }) }
+  function updateAd(id: string, field: keyof TargetedAd, value: string) {
+    save({ ...d, ads: d.ads.map(a => a.id === id ? { ...a, [field]: value } : a) })
+  }
+
+  function addInfluencer() { save({ ...d, influencers: [...d.influencers, { id: crypto.randomUUID(), category: '', format: '', budget: '' }] }) }
+  function removeInfluencer(id: string) { save({ ...d, influencers: d.influencers.filter(i => i.id !== id) }) }
+  function updateInfluencer(id: string, field: keyof Influencer, value: string) {
+    save({ ...d, influencers: d.influencers.map(i => i.id === id ? { ...i, [field]: value } : i) })
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Targeted ads */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">🎯</span>
+          Таргетована реклама
+        </h3>
+        <div className="space-y-3">
+          {d.ads.map((ad, i) => (
+            <div key={ad.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+                <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                <span className="text-xs font-semibold text-slate-400 flex-1">Кампанія {i + 1}</span>
+                <button onClick={() => removeAd(ad.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {([
+                  ['segment',  'Сегмент ЦА',  'Жінки 25–34, Київ, інтерес до фітнесу'],
+                  ['message',  'Меседж',       'Головний посил рекламного оголошення'],
+                  ['creative', 'Креатив',      'Відео, карусель, статичний банер...'],
+                  ['budget',   'Бюджет',       '5 000 грн / місяць'],
+                  ['kpi',      'КРІ',          'CPL до 150 грн, CTR від 2%'],
+                ] as [keyof TargetedAd, string, string][]).map(([field, label, ph]) => (
+                  <div key={field} className={field === 'message' || field === 'creative' ? 'sm:col-span-2' : ''}>
+                    <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
+                    <input
+                      type="text"
+                      value={ad[field] as string}
+                      onChange={e => updateAd(ad.id, field, e.target.value)}
+                      placeholder={ph}
+                      className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={addAd}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати кампанію
+          </button>
+        </div>
+      </div>
+
+      {/* Influencers */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs">🤝</span>
+          Робота з блогерами
+        </h3>
+        <div className="space-y-3">
+          {d.influencers.map((inf, i) => (
+            <div key={inf.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+                <span className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                <span className="text-xs font-semibold text-slate-400 flex-1">Блогер / колаборація {i + 1}</span>
+                <button onClick={() => removeInfluencer(inf.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  ['category', 'Категорія',         "Б'юті, фітнес, лайфстайл..."],
+                  ['format',   'Формат співпраці',   'Огляд, інтеграція, спільний Reels'],
+                  ['budget',   'Бюджет',             '3 000–10 000 грн / розміщення'],
+                ] as [keyof Influencer, string, string][]).map(([field, label, ph]) => (
+                  <div key={field}>
+                    <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
+                    <input
+                      type="text"
+                      value={inf[field] as string}
+                      onChange={e => updateInfluencer(inf.id, field, e.target.value)}
+                      placeholder={ph}
+                      className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={addInfluencer}
+            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-violet-500/50 rounded-xl text-slate-500 hover:text-violet-400 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати блогера
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Organic Tools form ───────────────────────────────────────────────────────
+
+interface OrganicToolsData { seo: string; contests: string; ugc: string; collaborations: string; community: string }
+
+const EMPTY_ORGANIC: OrganicToolsData = { seo: '', contests: '', ugc: '', collaborations: '', community: '' }
+
+function parseOrganicTools(raw: string): OrganicToolsData {
+  if (!raw) return { ...EMPTY_ORGANIC }
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return { ...EMPTY_ORGANIC }
+    return { ...EMPTY_ORGANIC, ...p }
+  } catch { return { ...EMPTY_ORGANIC } }
+}
+
+const ORGANIC_SECTIONS: { key: keyof OrganicToolsData; label: string; icon: string; placeholder: string }[] = [
+  { key: 'seo',            label: 'SEO та хештеги',   icon: '🔍', placeholder: 'Ключові слова для підписів, хештег-стратегія, оптимізація профілю...' },
+  { key: 'contests',       label: 'Конкурси і активації', icon: '🎁', placeholder: 'Формат конкурсу, умови участі, призи, частота, цілі (охоплення, підписники)...' },
+  { key: 'ugc',            label: 'UGC-кампанії',     icon: '📸', placeholder: 'Як стимулюємо створення контенту користувачами: механіка, хештег, репости...' },
+  { key: 'collaborations', label: 'Колаборації',      icon: '🤝', placeholder: "Спільні проєкти з брендами, ком'юніті, медіа: формат, аудиторія, умови..." },
+  { key: 'community',      label: "Ком'юніті",        icon: '💬', placeholder: 'Робота з коментарями, залучення в діалог, чат, закрита група, амбасадори...' },
+]
+
+function OrganicToolsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const d = parseOrganicTools(data.organicTools)
+  function save(next: OrganicToolsData) { updateField('organicTools', JSON.stringify(next)) }
+
+  return (
+    <div className="space-y-5">
+      {ORGANIC_SECTIONS.map(({ key, label, icon, placeholder }) => (
+        <div key={key}>
+          <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2 block">
+            <span>{icon}</span> {label}
+          </label>
+          <textarea
+            value={d[key]}
+            onChange={e => save({ ...d, [key]: e.target.value })}
+            placeholder={placeholder}
+            rows={3}
+            className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Sales Funnels form ───────────────────────────────────────────────────────
+
+const FUNNEL_STAGES = [
+  { key: 'awareness',     label: 'Знайомство',        color: 'bg-slate-500/20 text-slate-300',   border: 'border-slate-600/50' },
+  { key: 'warmup',        label: 'Прогрів',           color: 'bg-blue-500/20 text-blue-300',     border: 'border-blue-600/40' },
+  { key: 'presentation',  label: 'Презентація',        color: 'bg-indigo-500/20 text-indigo-300', border: 'border-indigo-600/40' },
+  { key: 'sale',          label: 'Продаж',            color: 'bg-violet-500/20 text-violet-300', border: 'border-violet-600/40' },
+  { key: 'retention',     label: 'Повторні продажі',  color: 'bg-emerald-500/20 text-emerald-300',border: 'border-emerald-600/40' },
+] as const
+
+type FunnelStageKey = typeof FUNNEL_STAGES[number]['key']
+interface SalesFunnel { id: string; name: string; awareness: string; warmup: string; presentation: string; sale: string; retention: string }
+
+function parseSalesFunnels(raw: string): SalesFunnel[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function SalesFunnelsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseSalesFunnels(data.salesFunnels)
+  function save(next: SalesFunnel[]) { updateField('salesFunnels', JSON.stringify(next)) }
+  function addFunnel() {
+    save([...list, { id: crypto.randomUUID(), name: '', awareness: '', warmup: '', presentation: '', sale: '', retention: '' }])
+  }
+  function removeFunnel(id: string) { save(list.filter(f => f.id !== id)) }
+  function updateFunnel(id: string, field: keyof SalesFunnel, value: string) {
+    save(list.map(f => f.id === id ? { ...f, [field]: value } : f))
+  }
+
+  return (
+    <div className="space-y-5">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Як виглядає шлях клієнта до покупки?</p>
+            <p className="text-xs text-slate-500">Опишіть тактики та контент для кожного етапу воронки. Окрема воронка — для кожного продукту або сегменту.</p>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {FUNNEL_STAGES.map((s, i) => (
+              <div key={s.key} className="flex items-center gap-1">
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${s.color} border ${s.border}`}>{s.label}</span>
+                {i < FUNNEL_STAGES.length - 1 && <span className="text-slate-600 text-xs">→</span>}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addFunnel}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати воронку
+          </button>
+        </div>
+      )}
+      {list.map((funnel, fi) => (
+        <div key={funnel.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+            <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{fi + 1}</span>
+            <input
+              type="text"
+              value={funnel.name}
+              onChange={e => updateFunnel(funnel.id, 'name', e.target.value)}
+              placeholder="Назва воронки (напр. «Основний продукт», «Upsell»)"
+              className="flex-1 bg-transparent text-white text-sm font-semibold placeholder-slate-600 outline-none"
+            />
+            <button onClick={() => removeFunnel(funnel.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          {/* Stages */}
+          <div className="p-4 space-y-3">
+            {FUNNEL_STAGES.map((stage, si) => (
+              <div key={stage.key} className="flex gap-3">
+                <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap ${stage.color} border ${stage.border}`}>
+                    {stage.label}
+                  </span>
+                  {si < FUNNEL_STAGES.length - 1 && (
+                    <div className="w-px flex-1 bg-slate-700/50 mt-1 min-h-[8px]" />
+                  )}
+                </div>
+                <textarea
+                  value={funnel[stage.key as FunnelStageKey]}
+                  onChange={e => updateFunnel(funnel.id, stage.key as keyof SalesFunnel, e.target.value)}
+                  placeholder={
+                    stage.key === 'awareness'    ? 'Reels, колаборації, таргет — як вперше потрапляємо у поле зору' :
+                    stage.key === 'warmup'       ? 'Корисний контент, сторіс, розсилка — будуємо довіру' :
+                    stage.key === 'presentation' ? 'Кейси, відгуки, демо, офер — показуємо продукт' :
+                    stage.key === 'sale'         ? 'CTA, дедлайн, бонус, спрощення оплати — закриваємо угоду' :
+                                                   'Онбординг, допродажі, реферальна програма — утримуємо клієнта'
+                  }
+                  rows={2}
+                  className="flex-1 bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {list.length > 0 && (
+        <button
+          onClick={addFunnel}
+          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Додати воронку
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -2264,6 +2558,12 @@ export default function ProjectPage() {
                 <ContentRubricatorForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'visualConcept' ? (
                 <VisualConceptForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'paidTools' ? (
+                <PaidToolsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'organicTools' ? (
+                <OrganicToolsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'salesFunnels' ? (
+                <SalesFunnelsForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
