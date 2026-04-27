@@ -2587,11 +2587,17 @@ interface RoadmapStage { deadline: string; tasks: string; status: RoadmapStatus 
 interface RoadmapData { stages: RoadmapStage[] }
 
 const ROADMAP_STAGES = [
-  { key: 0, label: 'Підготовка',  icon: '📋', color: 'text-slate-300',   bg: 'bg-slate-500/20',   border: 'border-slate-500/40',   hint: 'Аудит акаунту, розробка візуальної концепції, підготовка контент-бази' },
-  { key: 1, label: 'Запуск',      icon: '🚀', color: 'text-blue-300',    bg: 'bg-blue-500/20',    border: 'border-blue-500/40',    hint: 'Оновлення профілів, перші публікації, налаштування реклами' },
-  { key: 2, label: 'Розгін',      icon: '📈', color: 'text-indigo-300',  bg: 'bg-indigo-500/20',  border: 'border-indigo-500/40',  hint: 'Активне просування, колаборації, розширення аудиторії' },
-  { key: 3, label: 'Оптимізація', icon: '⚙️', color: 'text-emerald-300', bg: 'bg-emerald-500/20', border: 'border-emerald-500/40', hint: 'Аналіз результатів, масштабування, автоматизація процесів' },
+  { key: 0, label: 'Підготовка',  icon: '📋', labelColor: '#cbd5e1', cardBorder: 'rgba(100,116,139,0.35)', cardBg: 'rgba(100,116,139,0.07)', hint: 'Аудит акаунту, розробка візуальної концепції, підготовка контент-бази' },
+  { key: 1, label: 'Запуск',      icon: '🚀', labelColor: '#93c5fd', cardBorder: 'rgba(59,130,246,0.35)',  cardBg: 'rgba(59,130,246,0.07)',  hint: 'Оновлення профілів, перші публікації, налаштування реклами' },
+  { key: 2, label: 'Розгін',      icon: '📈', labelColor: '#a5b4fc', cardBorder: 'rgba(99,102,241,0.35)', cardBg: 'rgba(99,102,241,0.07)', hint: 'Активне просування, колаборації, розширення аудиторії' },
+  { key: 3, label: 'Оптимізація', icon: '⚙️', labelColor: '#6ee7b7', cardBorder: 'rgba(16,185,129,0.35)', cardBg: 'rgba(16,185,129,0.07)', hint: 'Аналіз результатів, масштабування, автоматизація процесів' },
 ]
+
+const ROADMAP_STATUS: Record<RoadmapStatus, { label: string; next: RoadmapStatus; dotColor: string; textColor: string }> = {
+  pending: { label: 'Заплановано', next: 'active', dotColor: '#64748b', textColor: '#475569' },
+  active:  { label: 'В процесі',   next: 'done',   dotColor: '#f59e0b', textColor: '#f59e0b' },
+  done:    { label: 'Виконано',    next: 'pending', dotColor: '#10b981', textColor: '#10b981' },
+}
 
 const DEFAULT_ROADMAP: RoadmapData = {
   stages: ROADMAP_STAGES.map(() => ({ deadline: '', tasks: '', status: 'pending' as RoadmapStatus })),
@@ -2610,12 +2616,6 @@ function parseRoadmap(raw: string): RoadmapData {
   } catch { return JSON.parse(JSON.stringify(DEFAULT_ROADMAP)) }
 }
 
-const STATUS_ROADMAP: Record<RoadmapStatus, { label: string; next: RoadmapStatus; dot: string }> = {
-  pending: { label: 'Заплановано', next: 'active', dot: 'bg-slate-500' },
-  active:  { label: 'В процесі',   next: 'done',   dot: 'bg-indigo-400 animate-pulse' },
-  done:    { label: 'Виконано',    next: 'pending', dot: 'bg-emerald-400' },
-}
-
 function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const d = parseRoadmap(data.implementationStages)
   function save(next: RoadmapData) { updateField('implementationStages', JSON.stringify(next)) }
@@ -2624,7 +2624,7 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
     save({ stages })
   }
   function cycleStatus(i: number) {
-    const next = STATUS_ROADMAP[d.stages[i].status].next
+    const next = ROADMAP_STATUS[d.stages[i].status].next
     updateStage(i, 'status', next)
   }
 
@@ -2636,8 +2636,8 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
       <div className="flex items-center gap-3">
         <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-500"
-            style={{ width: `${(doneCount / 4) * 100}%` }}
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${(doneCount / 4) * 100}%`, background: 'linear-gradient(to right, #6366f1, #10b981)' }}
           />
         </div>
         <span className="text-xs text-slate-500 flex-shrink-0">{doneCount}/4 етапи</span>
@@ -2646,27 +2646,38 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
       {/* Stages */}
       {ROADMAP_STAGES.map((def, i) => {
         const stage = d.stages[i]
-        const sr = STATUS_ROADMAP[stage.status]
+        const sc = ROADMAP_STATUS[stage.status]
         return (
-          <div key={i} className={`border rounded-xl overflow-hidden transition-all ${stage.status === 'done' ? 'opacity-70' : ''} ${def.border}`}>
+          <div
+            key={i}
+            className={`rounded-xl overflow-hidden transition-all${stage.status === 'done' ? ' opacity-60' : ''}`}
+            style={{ border: `1px solid ${def.cardBorder}` }}
+          >
             {/* Stage header */}
-            <div className={`flex items-center gap-3 px-4 py-3 border-b ${def.border} ${def.bg}`}>
+            <div
+              className="flex items-center gap-3 px-4 py-3"
+              style={{ backgroundColor: def.cardBg, borderBottom: `1px solid ${def.cardBorder}` }}
+            >
+              {/* Status dot — click to cycle */}
               <button
                 onClick={() => cycleStatus(i)}
-                title={sr.label}
-                className="flex-shrink-0"
+                title={`${sc.label} → клік для зміни`}
+                className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full transition-all"
+                style={{ backgroundColor: sc.dotColor }}
               >
-                <span className={`w-4 h-4 rounded-full flex items-center justify-center ${sr.dot} ${stage.status === 'done' ? '' : 'border-2 border-slate-600'}`}>
-                  {stage.status === 'done' && <Check size={10} className="text-white" />}
-                </span>
+                {stage.status === 'done' && <Check size={10} color="#ffffff" />}
+                {stage.status === 'active' && (
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                )}
               </button>
+
               <span className="text-base">{def.icon}</span>
-              <div className="flex-1">
-                <span className={`text-sm font-bold ${def.color}`}>{def.label}</span>
-                <span className={`ml-2 text-xs ${stage.status === 'active' ? 'text-indigo-400' : stage.status === 'done' ? 'text-emerald-400' : 'text-slate-600'}`}>
-                  {sr.label}
-                </span>
+
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-bold" style={{ color: def.labelColor }}>{def.label}</span>
+                <span className="ml-2 text-xs" style={{ color: sc.textColor }}>{sc.label}</span>
               </div>
+
               <input
                 type="date"
                 value={stage.deadline}
@@ -2674,7 +2685,8 @@ function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f
                 className="bg-slate-800/80 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs text-slate-300 transition-colors flex-shrink-0"
               />
             </div>
-            {/* Tasks */}
+
+            {/* Tasks textarea */}
             <div className="p-4 bg-slate-900/40">
               <textarea
                 value={stage.tasks}
