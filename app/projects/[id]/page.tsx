@@ -2077,26 +2077,43 @@ function PaidToolsForm({ data, updateField }: { data: ProjectData; updateField: 
 
 // ─── Organic Tools form ───────────────────────────────────────────────────────
 
-interface OrganicToolsData { seo: string; contests: string; ugc: string; collaborations: string; community: string }
-
-const EMPTY_ORGANIC: OrganicToolsData = { seo: '', contests: '', ugc: '', collaborations: '', community: '' }
-
-function parseOrganicTools(raw: string): OrganicToolsData {
-  if (!raw) return { ...EMPTY_ORGANIC }
-  try {
-    const p = JSON.parse(raw)
-    if (!p || typeof p !== 'object') return { ...EMPTY_ORGANIC }
-    return { ...EMPTY_ORGANIC, ...p }
-  } catch { return { ...EMPTY_ORGANIC } }
+interface SeoData { keywords: string; hashtagStrategy: string }
+interface ContestData { mechanic: string; prize: string; goal: string }
+interface OrganicToolsData {
+  seo: SeoData
+  contests: ContestData
+  ugc: string
+  collaborations: string
+  community: string
 }
 
-const ORGANIC_SECTIONS: { key: keyof OrganicToolsData; label: string; icon: string; placeholder: string }[] = [
-  { key: 'seo',            label: 'SEO та хештеги',   icon: '🔍', placeholder: 'Ключові слова для підписів, хештег-стратегія, оптимізація профілю...' },
-  { key: 'contests',       label: 'Конкурси і активації', icon: '🎁', placeholder: 'Формат конкурсу, умови участі, призи, частота, цілі (охоплення, підписники)...' },
-  { key: 'ugc',            label: 'UGC-кампанії',     icon: '📸', placeholder: 'Як стимулюємо створення контенту користувачами: механіка, хештег, репости...' },
-  { key: 'collaborations', label: 'Колаборації',      icon: '🤝', placeholder: "Спільні проєкти з брендами, ком'юніті, медіа: формат, аудиторія, умови..." },
-  { key: 'community',      label: "Ком'юніті",        icon: '💬', placeholder: 'Робота з коментарями, залучення в діалог, чат, закрита група, амбасадори...' },
-]
+const EMPTY_SEO: SeoData = { keywords: '', hashtagStrategy: '' }
+const EMPTY_CONTEST: ContestData = { mechanic: '', prize: '', goal: '' }
+const EMPTY_ORGANIC: OrganicToolsData = { seo: EMPTY_SEO, contests: EMPTY_CONTEST, ugc: '', collaborations: '', community: '' }
+
+function parseOrganicTools(raw: string): OrganicToolsData {
+  if (!raw) return JSON.parse(JSON.stringify(EMPTY_ORGANIC))
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_ORGANIC))
+    const seo: SeoData = typeof p.seo === 'string'
+      ? { keywords: '', hashtagStrategy: p.seo }
+      : { keywords: String(p.seo?.keywords ?? ''), hashtagStrategy: String(p.seo?.hashtagStrategy ?? '') }
+    const contests: ContestData = typeof p.contests === 'string'
+      ? { mechanic: p.contests, prize: '', goal: '' }
+      : { mechanic: String(p.contests?.mechanic ?? ''), prize: String(p.contests?.prize ?? ''), goal: String(p.contests?.goal ?? '') }
+    return {
+      seo,
+      contests,
+      ugc: String(p.ugc ?? ''),
+      collaborations: String(p.collaborations ?? ''),
+      community: String(p.community ?? ''),
+    }
+  } catch { return JSON.parse(JSON.stringify(EMPTY_ORGANIC)) }
+}
+
+const inputCls = 'w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors outline-none'
+const textareaCls = 'w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none outline-none'
 
 function OrganicToolsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const d = parseOrganicTools(data.organicTools)
@@ -2104,7 +2121,76 @@ function OrganicToolsForm({ data, updateField }: { data: ProjectData; updateFiel
 
   return (
     <div className="space-y-5">
-      {ORGANIC_SECTIONS.map(({ key, label, icon, placeholder }) => (
+
+      {/* SEO та хештеги — structured */}
+      <div className="space-y-3 bg-slate-900/50 border border-slate-700/60 rounded-xl p-4">
+        <p className="text-sm font-semibold text-slate-300 flex items-center gap-2">🔍 SEO та хештеги</p>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5 block">Ключові слова</label>
+          <input
+            type="text"
+            value={d.seo.keywords}
+            onChange={e => save({ ...d, seo: { ...d.seo, keywords: e.target.value } })}
+            placeholder="назва бренду, продукт, ніша, проблема клієнта..."
+            className={inputCls}
+          />
+          <p className="text-xs text-slate-600 mt-1">Через кому — для підписів, опису профілю, Alt-текстів</p>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5 block">Хештег-стратегія</label>
+          <textarea
+            value={d.seo.hashtagStrategy}
+            onChange={e => save({ ...d, seo: { ...d.seo, hashtagStrategy: e.target.value } })}
+            placeholder={"Рубрики хештегів: брендові (#mybrand), популярні (#beauty), нішеві (#kyivbeauty). Кількість на пост, частота ротації..."}
+            rows={3}
+            className={textareaCls}
+          />
+        </div>
+      </div>
+
+      {/* Конкурси — structured */}
+      <div className="space-y-3 bg-slate-900/50 border border-slate-700/60 rounded-xl p-4">
+        <p className="text-sm font-semibold text-slate-300 flex items-center gap-2">🎁 Конкурси і активації</p>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5 block">Механіка</label>
+          <textarea
+            value={d.contests.mechanic}
+            onChange={e => save({ ...d, contests: { ...d.contests, mechanic: e.target.value } })}
+            placeholder="Умови участі: лайк + підписка, тег друга, репост Stories, коментар-відповідь, UGC-пост..."
+            rows={2}
+            className={textareaCls}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5 block">Приз</label>
+            <input
+              type="text"
+              value={d.contests.prize}
+              onChange={e => save({ ...d, contests: { ...d.contests, prize: e.target.value } })}
+              placeholder="Продукт, знижка, послуга..."
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5 block">Ціль</label>
+            <input
+              type="text"
+              value={d.contests.goal}
+              onChange={e => save({ ...d, contests: { ...d.contests, goal: e.target.value } })}
+              placeholder="Охоплення, підписники, UGC..."
+              className={inputCls}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* UGC, Колаборації, Ком'юніті — textarea */}
+      {([
+        { key: 'ugc' as const,            label: "UGC-кампанії",  icon: '📸', placeholder: 'Як стимулюємо створення контенту: механіка, брендований хештег, умови репосту, мотивація...' },
+        { key: 'collaborations' as const, label: 'Колаборації',   icon: '🤝', placeholder: "Спільні проєкти з брендами або медіа: формат (giveaway, коллаб-пост), аудиторія партнера, умови обміну..." },
+        { key: 'community' as const,      label: "Ком'юніті",     icon: '💬', placeholder: "Залучення в діалог, робота з коментарями, закрита група / чат, програма амбасадорів..." },
+      ]).map(({ key, label, icon, placeholder }) => (
         <div key={key}>
           <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2 block">
             <span>{icon}</span> {label}
@@ -2114,10 +2200,11 @@ function OrganicToolsForm({ data, updateField }: { data: ProjectData; updateFiel
             onChange={e => save({ ...d, [key]: e.target.value })}
             placeholder={placeholder}
             rows={3}
-            className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+            className={textareaCls}
           />
         </div>
       ))}
+
     </div>
   )
 }
