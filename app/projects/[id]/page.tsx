@@ -610,6 +610,45 @@ function TasksForm({ data, updateField }: { data: ProjectData; updateField: (f: 
         </div>
       )}
 
+      {/* Empty state */}
+      {total === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Що потрібно зробити для цього проєкту?</p>
+            <p className="text-xs text-slate-500">Додайте конкретні задачі з дедлайнами і відповідальними. Клікніть на приклад — він одразу з&apos;явиться у списку.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Типові задачі SMM</p>
+            {([
+              { title: 'Провести аудит поточного акаунту', priority: 'high' as TaskPriority },
+              { title: 'Скласти контент-план на місяць', priority: 'high' as TaskPriority },
+              { title: 'Розробити шаблони для сторіс та постів', priority: 'medium' as TaskPriority },
+              { title: 'Налаштувати рекламний кабінет', priority: 'medium' as TaskPriority },
+              { title: 'Зібрати та оформити відгуки клієнтів', priority: 'low' as TaskPriority },
+            ]).map(({ title, priority }) => (
+              <button
+                key={title}
+                onClick={() => {
+                  const t: Task = { id: crypto.randomUUID(), title, deadline: '', priority, status: 'planned', assignee: '' }
+                  save({ tasks: [...td.tasks, t] })
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg transition-all text-left group"
+              >
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${priority === 'high' ? 'bg-red-400' : priority === 'medium' ? 'bg-yellow-400' : 'bg-slate-500'}`} />
+                <span className="text-sm text-slate-300 group-hover:text-white transition-colors flex-1">{title}</span>
+                <span className={`text-xs flex-shrink-0 ${PRIORITY_CONFIG[priority].color} px-2 py-0.5 rounded-md border`}>{PRIORITY_CONFIG[priority].label}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={addTask}
+            className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власну задачу
+          </button>
+        </div>
+      )}
+
       {/* Task list */}
       <div className="space-y-2">
         {td.tasks.map((task) => (
@@ -727,6 +766,29 @@ function CompetitorForm({ data, updateField }: { data: ProjectData; updateField:
 
   return (
     <div className="space-y-4">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Хто ваші основні конкуренти?</p>
+            <p className="text-xs text-slate-500">Додайте 3–5 конкурентів: посилання на їх сайт і соцмережі, що роблять добре і де їхні слабкі місця. Це основа для відбудови позиціювання.</p>
+          </div>
+          <div className="bg-slate-900/60 rounded-lg p-3 space-y-1.5">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold mb-2">Що заповнювати</p>
+            {[['🌐 Сайт', 'Посилання на основний сайт'], ['📸 Instagram', 'Нік акаунту (@назва)'], ['🎵 TikTok', 'Нік акаунту'], ['✅ Сильні сторони', 'Що роблять добре: контент, спільнота, оффер...'], ['❌ Слабкі сторони', 'Де є прогалини, що можна зробити краще']].map(([label, hint]) => (
+              <div key={label} className="flex items-baseline gap-2">
+                <span className="text-xs text-slate-400 flex-shrink-0 w-28">{label}</span>
+                <span className="text-xs text-slate-600">{hint}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати першого конкурента
+          </button>
+        </div>
+      )}
       {list.map((c, i) => (
         <div key={c.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
           {/* Header */}
@@ -907,6 +969,43 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
           Бренд-чемпіони (портрети клієнтів)
         </h3>
         <div className="space-y-4">
+          {a.champions.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-300">Хто ваш ідеальний клієнт?</p>
+                <p className="text-xs text-slate-500">Бренд-чемпіон — детальний портрет типового покупця. 2–3 портрети допомагають писати контент «для конкретної людини», а не «для всіх».</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади портретів</p>
+                {([
+                  { name: 'Молода мама', demographics: 'Жінка, 28–34 р., Київ', profession: 'В декреті або часткова зайнятість', needs: 'Економія часу, зручність, перевірена якість', pains: 'Немає часу на дослідження, все дорожчає' },
+                  { name: 'Активний підприємець', demographics: 'Чоловік, 32–45 р., великі міста', profession: 'CEO або власник малого бізнесу', needs: 'Ефективність, статус, готові рішення', pains: 'Немає часу, хочу результату тут і зараз' },
+                ] as Omit<BrandChampion, 'id'>[]).map((ex) => (
+                  <button
+                    key={ex.name}
+                    onClick={() => {
+                      const c: BrandChampion = { id: crypto.randomUUID(), ...ex }
+                      save({ ...a, champions: [...a.champions, c] })
+                    }}
+                    className="w-full text-left p-3 bg-slate-800 hover:bg-emerald-500/5 border border-slate-700 hover:border-emerald-500/30 rounded-lg transition-all group"
+                  >
+                    <p className="text-sm font-semibold text-slate-300 group-hover:text-white mb-1 transition-colors">{ex.name}</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      {[['Демографія', ex.demographics], ['Професія', ex.profession], ['Потреби', ex.needs], ['Болі', ex.pains]].map(([lbl, val]) => (
+                        <p key={lbl} className="text-xs text-slate-500"><span className="text-slate-600">{lbl}: </span>{val}</p>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={addChampion}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Plus size={14} /> Додати власний портрет
+              </button>
+            </div>
+          )}
           {a.champions.map((c, i) => (
             <div key={c.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-3">
@@ -987,6 +1086,25 @@ function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: ke
           Унікальні особливості
         </h3>
         <div className="space-y-2">
+          {u.features.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-700 p-4 space-y-3 mb-1">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-300">Що відрізняє вас від конкурентів?</p>
+                <p className="text-xs text-slate-500">Пишіть конкретні факти, які клієнт може перевірити. «Якість» і «досвід» — не унікальність.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['Гарантія результату або повернення коштів', 'Відповідь клієнту протягом 1 години', '10+ років досвіду у ніші', 'Лише сертифіковані спеціалісти', 'Персональний менеджер на весь проєкт', 'Портфоліо 200+ успішних кейсів'].map(ex => (
+                  <button
+                    key={ex}
+                    onClick={() => save({ ...u, features: [...u.features, ex] })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-indigo-500/10 border border-slate-700 hover:border-indigo-500/40 rounded-lg text-xs text-slate-400 hover:text-indigo-300 transition-all"
+                  >
+                    <Plus size={10} /> {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {u.features.map((feature, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
@@ -1062,8 +1180,42 @@ function BrandValuesForm({ data, updateField }: { data: ProjectData; updateField
     save(list.map(v => v.id === id ? { ...v, [field]: value } : v))
   }
 
+  const VALUES_EXAMPLES: BrandValue[] = [
+    { id: '', title: 'Якість', description: 'Ми не йдемо на компроміс з продуктом — кожна деталь продумана.', translation: 'Детальні кейси, BTS-контент, відгуки з реальними результатами' },
+    { id: '', title: 'Чесність', description: 'Говоримо відкрито — про ціни, процеси і навіть помилки.', translation: 'Прозорість у постах, щирі відповіді на коментарі, визнання прорахунків' },
+    { id: '', title: 'Турбота', description: 'Кожен клієнт — це конкретна людина з конкретними потребами.', translation: 'Персональний підхід, швидка підтримка, контент «для вас, а не для всіх»' },
+  ]
+
   return (
     <div className="space-y-4">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Які принципи лежать в основі бренду?</p>
+            <p className="text-xs text-slate-500">Цінності — це не слова на сайті. Це реальні орієнтири для контенту і рішень. 3–5 цінностей достатньо. Натисніть на приклад, щоб додати і відредагувати.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади</p>
+            {VALUES_EXAMPLES.map(ex => (
+              <button
+                key={ex.title}
+                onClick={() => save([...list, { ...ex, id: crypto.randomUUID() }])}
+                className="w-full text-left p-3 bg-slate-800 hover:bg-violet-500/5 border border-slate-700 hover:border-violet-500/30 rounded-lg transition-all group"
+              >
+                <p className="text-sm font-semibold text-slate-300 group-hover:text-white mb-1 transition-colors">{ex.title}</p>
+                <p className="text-xs text-slate-500"><span className="text-slate-600">Опис: </span>{ex.description}</p>
+                <p className="text-xs text-slate-500 mt-0.5"><span className="text-slate-600">Транслюємо: </span>{ex.translation}</p>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власну цінність
+          </button>
+        </div>
+      )}
       {list.map((v, i) => (
         <div key={v.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
@@ -1455,8 +1607,49 @@ function ContentRubricatorForm({ data, updateField }: { data: ProjectData; updat
     save(list.map(r => r.id === id ? { ...r, [field]: value } : r))
   }
 
+  const RUBRIC_EXAMPLES: ContentRubric[] = [
+    { id: '', name: 'Корисний контент', frequency: '2× на тиждень', format: 'Каруселі, Reels', goal: 'Підвищення довіри та органічного охоплення' },
+    { id: '', name: 'Відгуки і кейси', frequency: '2–3× на тиждень', format: 'Stories, пости', goal: 'Social proof, підштовхування до покупки' },
+    { id: '', name: 'За лаштунками', frequency: '1–2× на тиждень', format: 'Reels, Stories', goal: 'Людяність бренду, лояльність аудиторії' },
+    { id: '', name: 'Продаючий контент', frequency: '1× на тиждень', format: 'Пост + Stories', goal: 'Прямі продажі та конверсії' },
+  ]
+
   return (
     <div className="space-y-4">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">За якими рубриками виходитиме контент?</p>
+            <p className="text-xs text-slate-500">Рубрикатор — це каркас контент-плану. 4–6 рубрик дають різноманітність і системність. Клікніть на приклад, щоб додати і відредагувати.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади рубрик</p>
+            {RUBRIC_EXAMPLES.map(ex => (
+              <button
+                key={ex.name}
+                onClick={() => save([...list, { ...ex, id: crypto.randomUUID() }])}
+                className="w-full text-left p-3 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-indigo-400 text-xs">📌</span>
+                  <span className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">{ex.name}</span>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 pl-5">
+                  {[['Частота', ex.frequency], ['Формат', ex.format], ['Мета', ex.goal]].map(([lbl, val]) => (
+                    <p key={lbl} className="text-xs text-slate-500"><span className="text-slate-600">{lbl}: </span>{val}</p>
+                  ))}
+                </div>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власну рубрику
+          </button>
+        </div>
+      )}
       {list.map((r, i) => (
         <div key={r.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
