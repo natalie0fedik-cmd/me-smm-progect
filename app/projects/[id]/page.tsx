@@ -1945,7 +1945,7 @@ function VisualConceptForm({ data, updateField }: { data: ProjectData; updateFie
 // ─── Paid Tools form ─────────────────────────────────────────────────────────
 
 interface TargetedAd { id: string; segment: string; message: string; creative: string; budget: string; kpi: string }
-interface Influencer  { id: string; category: string; format: string; budget: string }
+interface Influencer  { id: string; nickname: string; reach: string; format: string; budget: string; kpi: string }
 interface PaidToolsData { ads: TargetedAd[]; influencers: Influencer[] }
 
 const EMPTY_PAID: PaidToolsData = { ads: [], influencers: [] }
@@ -1955,10 +1955,17 @@ function parsePaidTools(raw: string): PaidToolsData {
   try {
     const p = JSON.parse(raw)
     if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_PAID))
-    return {
-      ads:         Array.isArray(p.ads)         ? p.ads         : [],
-      influencers: Array.isArray(p.influencers) ? p.influencers : [],
-    }
+    const influencers: Influencer[] = Array.isArray(p.influencers)
+      ? p.influencers.map((inf: Record<string, string>) => ({
+          id:       inf.id       ?? crypto.randomUUID(),
+          nickname: inf.nickname ?? inf.category ?? '',
+          reach:    inf.reach    ?? '',
+          format:   inf.format   ?? '',
+          budget:   inf.budget   ?? '',
+          kpi:      inf.kpi      ?? '',
+        }))
+      : []
+    return { ads: Array.isArray(p.ads) ? p.ads : [], influencers }
   } catch { return JSON.parse(JSON.stringify(EMPTY_PAID)) }
 }
 
@@ -1972,7 +1979,7 @@ function PaidToolsForm({ data, updateField }: { data: ProjectData; updateField: 
     save({ ...d, ads: d.ads.map(a => a.id === id ? { ...a, [field]: value } : a) })
   }
 
-  function addInfluencer() { save({ ...d, influencers: [...d.influencers, { id: crypto.randomUUID(), category: '', format: '', budget: '' }] }) }
+  function addInfluencer() { save({ ...d, influencers: [...d.influencers, { id: crypto.randomUUID(), nickname: '', reach: '', format: '', budget: '', kpi: '' }] }) }
   function removeInfluencer(id: string) { save({ ...d, influencers: d.influencers.filter(i => i.id !== id) }) }
   function updateInfluencer(id: string, field: keyof Influencer, value: string) {
     save({ ...d, influencers: d.influencers.map(i => i.id === id ? { ...i, [field]: value } : i) })
@@ -2043,23 +2050,71 @@ function PaidToolsForm({ data, updateField }: { data: ProjectData; updateField: 
                   <X size={14} />
                 </button>
               </div>
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {([
-                  ['category', 'Категорія',         "Б'юті, фітнес, лайфстайл..."],
-                  ['format',   'Формат співпраці',   'Огляд, інтеграція, спільний Reels'],
-                  ['budget',   'Бюджет',             '3 000–10 000 грн / розміщення'],
-                ] as [keyof Influencer, string, string][]).map(([field, label, ph]) => (
-                  <div key={field}>
-                    <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
-                    <input
-                      type="text"
-                      value={inf[field] as string}
-                      onChange={e => updateInfluencer(inf.id, field, e.target.value)}
-                      placeholder={ph}
-                      className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
-                    />
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    ['nickname', 'Нікнейм / акаунт', '@username або посилання'],
+                    ['reach',    'Охоплення',         '10K–50K підписників, ER ~4%'],
+                  ] as [keyof Influencer, string, string][]).map(([field, label, ph]) => (
+                    <div key={field}>
+                      <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
+                      <input
+                        type="text"
+                        value={inf[field] as string}
+                        onChange={e => updateInfluencer(inf.id, field, e.target.value)}
+                        placeholder={ph}
+                        className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 tracking-wider mb-1 block">Формат співпраці</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Інтеграція', 'Розпаковка', 'Відгук', 'Спільний Reels', 'Stories', 'Ambasador'].map(fmt => {
+                      const active = inf.format === fmt
+                      return (
+                        <button
+                          key={fmt}
+                          onClick={() => updateInfluencer(inf.id, 'format', active ? '' : fmt)}
+                          style={active
+                            ? { backgroundColor: 'rgba(139,92,246,0.2)', borderColor: 'rgba(139,92,246,0.5)', color: '#c4b5fd' }
+                            : { backgroundColor: 'rgba(30,41,59,0.6)', borderColor: 'rgba(71,85,105,0.5)', color: '#94a3b8' }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border"
+                        >
+                          {fmt}
+                        </button>
+                      )
+                    })}
+                    {inf.format && !['Інтеграція', 'Розпаковка', 'Відгук', 'Спільний Reels', 'Stories', 'Ambasador'].includes(inf.format) && (
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium border" style={{ backgroundColor: 'rgba(139,92,246,0.2)', borderColor: 'rgba(139,92,246,0.5)', color: '#c4b5fd' }}>{inf.format}</span>
+                    )}
                   </div>
-                ))}
+                  <input
+                    type="text"
+                    value={['Інтеграція', 'Розпаковка', 'Відгук', 'Спільний Reels', 'Stories', 'Ambasador'].includes(inf.format) ? '' : inf.format}
+                    onChange={e => updateInfluencer(inf.id, 'format', e.target.value)}
+                    placeholder="Або вкажіть свій формат..."
+                    className="mt-2 w-full bg-slate-800/40 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-600 text-xs transition-colors"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    ['budget', 'Бюджет',  '3 000–10 000 грн / розміщення'],
+                    ['kpi',    'КРІ',     'Охоплення 20K, 50 переходів на сайт'],
+                  ] as [keyof Influencer, string, string][]).map(([field, label, ph]) => (
+                    <div key={field}>
+                      <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
+                      <input
+                        type="text"
+                        value={inf[field] as string}
+                        onChange={e => updateInfluencer(inf.id, field, e.target.value)}
+                        placeholder={ph}
+                        className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ))}
