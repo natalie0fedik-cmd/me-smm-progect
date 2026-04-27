@@ -269,7 +269,8 @@ const GROUPS: GroupDef[] = [
         label: 'КРІ та Метрики',
         number: '10',
         description: 'Ключові показники ефективності та як їх вимірювати',
-        placeholder: 'Охоплення: ... на місяць\nER: ...%\nПідписники: +... на місяць\nКліки: ...\nКонверсії: ...',
+        custom: true,
+        fields: ['kpi'],
       },
     ],
   },
@@ -284,7 +285,8 @@ const GROUPS: GroupDef[] = [
         label: 'Етапи реалізації',
         number: '11',
         description: 'Покроковий план впровадження стратегії з дедлайнами',
-        placeholder: '🟢 Етап 1 — [назва] (дедлайн: ...)\n— Задача\n— Задача\n\n🟡 Етап 2 — ...',
+        custom: true,
+        fields: ['implementationStages'],
       },
     ],
   },
@@ -2457,6 +2459,236 @@ function HighlightsForm({ data, updateField }: { data: ProjectData; updateField:
   )
 }
 
+// ─── KPI form ────────────────────────────────────────────────────────────────
+
+interface KpiMetric { id: string; name: string; target: string; current: string; period: string }
+
+function parseKpi(raw: string): KpiMetric[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+const KPI_EXAMPLES: KpiMetric[] = [
+  { id: '', name: 'Підписники',          target: '+500 / місяць',  current: '',  period: 'Щомісяця' },
+  { id: '', name: 'Охоплення',           target: '50 000 / місяць', current: '', period: 'Щомісяця' },
+  { id: '', name: 'ER (залученість)',     target: 'від 3%',          current: '', period: 'По кожному посту' },
+  { id: '', name: 'Трафік на сайт',       target: '1 000 кліків',   current: '',  period: 'Щомісяця' },
+  { id: '', name: 'Конверсія в продажі',  target: 'від 2%',          current: '', period: 'Щомісяця' },
+  { id: '', name: 'Вартість підписника',  target: 'до 30 грн',       current: '', period: 'На рекламну кампанію' },
+]
+
+function KpiForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseKpi(data.kpi)
+  function save(next: KpiMetric[]) { updateField('kpi', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), name: '', target: '', current: '', period: '' }]) }
+  function remove(id: string) { save(list.filter(k => k.id !== id)) }
+  function update(id: string, field: keyof KpiMetric, value: string) {
+    save(list.map(k => k.id === id ? { ...k, [field]: value } : k))
+  }
+
+  return (
+    <div className="space-y-4">
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Які показники визначать успіх стратегії?</p>
+            <p className="text-xs text-slate-500">Додайте конкретні цілі з цифрами. Без цілей неможливо зрозуміти, чи працює стратегія. Клікніть на приклад, щоб додати.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Типові КРІ</p>
+            {KPI_EXAMPLES.map(ex => (
+              <button
+                key={ex.name}
+                onClick={() => save([...list, { ...ex, id: crypto.randomUUID() }])}
+                className="w-full flex items-center gap-3 px-4 py-2.5 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all group text-left"
+              >
+                <span className="text-sm text-slate-300 group-hover:text-white flex-1 transition-colors">{ex.name}</span>
+                <span className="text-xs text-indigo-400 flex-shrink-0">{ex.target}</span>
+                <span className="text-xs text-slate-600 flex-shrink-0">{ex.period}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власний КРІ
+          </button>
+        </div>
+      )}
+
+      {/* Table header */}
+      {list.length > 0 && (
+        <div className="grid grid-cols-[1fr_120px_120px_120px_32px] gap-2 px-3 text-xs text-slate-600 font-semibold uppercase tracking-wider">
+          <span>Показник</span>
+          <span>Ціль</span>
+          <span>Поточне</span>
+          <span>Період</span>
+          <span />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {list.map(k => (
+          <div key={k.id} className="grid grid-cols-[1fr_120px_120px_120px_32px] gap-2 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-3 py-2.5">
+            <input
+              type="text"
+              value={k.name}
+              onChange={e => update(k.id, 'name', e.target.value)}
+              placeholder="Назва метрики"
+              className="bg-transparent text-slate-100 text-sm placeholder-slate-600 outline-none"
+            />
+            <input
+              type="text"
+              value={k.target}
+              onChange={e => update(k.id, 'target', e.target.value)}
+              placeholder="+500 / міс"
+              className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none transition-colors text-center"
+            />
+            <input
+              type="text"
+              value={k.current}
+              onChange={e => update(k.id, 'current', e.target.value)}
+              placeholder="Зараз..."
+              className="bg-slate-800 border border-slate-700 focus:border-emerald-500/50 rounded-lg px-2 py-1.5 text-xs text-emerald-300 placeholder-slate-600 outline-none transition-colors text-center"
+            />
+            <input
+              type="text"
+              value={k.period}
+              onChange={e => update(k.id, 'period', e.target.value)}
+              placeholder="Щомісяця"
+              className="bg-slate-800 border border-slate-700 focus:border-slate-500 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none transition-colors text-center"
+            />
+            <button onClick={() => remove(k.id)} className="text-slate-600 hover:text-red-400 transition-colors justify-self-center">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {list.length > 0 && (
+        <button
+          onClick={add}
+          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Додати метрику
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Roadmap form ─────────────────────────────────────────────────────────────
+
+type RoadmapStatus = 'pending' | 'active' | 'done'
+interface RoadmapStage { deadline: string; tasks: string; status: RoadmapStatus }
+interface RoadmapData { stages: RoadmapStage[] }
+
+const ROADMAP_STAGES = [
+  { key: 0, label: 'Підготовка',  icon: '📋', color: 'text-slate-300',   bg: 'bg-slate-500/20',   border: 'border-slate-500/40',   hint: 'Аудит акаунту, розробка візуальної концепції, підготовка контент-бази' },
+  { key: 1, label: 'Запуск',      icon: '🚀', color: 'text-blue-300',    bg: 'bg-blue-500/20',    border: 'border-blue-500/40',    hint: 'Оновлення профілів, перші публікації, налаштування реклами' },
+  { key: 2, label: 'Розгін',      icon: '📈', color: 'text-indigo-300',  bg: 'bg-indigo-500/20',  border: 'border-indigo-500/40',  hint: 'Активне просування, колаборації, розширення аудиторії' },
+  { key: 3, label: 'Оптимізація', icon: '⚙️', color: 'text-emerald-300', bg: 'bg-emerald-500/20', border: 'border-emerald-500/40', hint: 'Аналіз результатів, масштабування, автоматизація процесів' },
+]
+
+const DEFAULT_ROADMAP: RoadmapData = {
+  stages: ROADMAP_STAGES.map(() => ({ deadline: '', tasks: '', status: 'pending' as RoadmapStatus })),
+}
+
+function parseRoadmap(raw: string): RoadmapData {
+  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_ROADMAP))
+  try {
+    const p = JSON.parse(raw)
+    if (!p || !Array.isArray(p.stages)) return JSON.parse(JSON.stringify(DEFAULT_ROADMAP))
+    const stages = ROADMAP_STAGES.map((_, i) => {
+      const s = p.stages[i] ?? {}
+      return { deadline: String(s.deadline ?? ''), tasks: String(s.tasks ?? ''), status: (s.status ?? 'pending') as RoadmapStatus }
+    })
+    return { stages }
+  } catch { return JSON.parse(JSON.stringify(DEFAULT_ROADMAP)) }
+}
+
+const STATUS_ROADMAP: Record<RoadmapStatus, { label: string; next: RoadmapStatus; dot: string }> = {
+  pending: { label: 'Заплановано', next: 'active', dot: 'bg-slate-500' },
+  active:  { label: 'В процесі',   next: 'done',   dot: 'bg-indigo-400 animate-pulse' },
+  done:    { label: 'Виконано',    next: 'pending', dot: 'bg-emerald-400' },
+}
+
+function RoadmapForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const d = parseRoadmap(data.implementationStages)
+  function save(next: RoadmapData) { updateField('implementationStages', JSON.stringify(next)) }
+  function updateStage(i: number, field: keyof RoadmapStage, value: string) {
+    const stages = d.stages.map((s, idx) => idx === i ? { ...s, [field]: value } : s)
+    save({ stages })
+  }
+  function cycleStatus(i: number) {
+    const next = STATUS_ROADMAP[d.stages[i].status].next
+    updateStage(i, 'status', next)
+  }
+
+  const doneCount = d.stages.filter(s => s.status === 'done').length
+
+  return (
+    <div className="space-y-4">
+      {/* Overall progress */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-500"
+            style={{ width: `${(doneCount / 4) * 100}%` }}
+          />
+        </div>
+        <span className="text-xs text-slate-500 flex-shrink-0">{doneCount}/4 етапи</span>
+      </div>
+
+      {/* Stages */}
+      {ROADMAP_STAGES.map((def, i) => {
+        const stage = d.stages[i]
+        const sr = STATUS_ROADMAP[stage.status]
+        return (
+          <div key={i} className={`border rounded-xl overflow-hidden transition-all ${stage.status === 'done' ? 'opacity-70' : ''} ${def.border}`}>
+            {/* Stage header */}
+            <div className={`flex items-center gap-3 px-4 py-3 border-b ${def.border} ${def.bg}`}>
+              <button
+                onClick={() => cycleStatus(i)}
+                title={sr.label}
+                className="flex-shrink-0"
+              >
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center ${sr.dot} ${stage.status === 'done' ? '' : 'border-2 border-slate-600'}`}>
+                  {stage.status === 'done' && <Check size={10} className="text-white" />}
+                </span>
+              </button>
+              <span className="text-base">{def.icon}</span>
+              <div className="flex-1">
+                <span className={`text-sm font-bold ${def.color}`}>{def.label}</span>
+                <span className={`ml-2 text-xs ${stage.status === 'active' ? 'text-indigo-400' : stage.status === 'done' ? 'text-emerald-400' : 'text-slate-600'}`}>
+                  {sr.label}
+                </span>
+              </div>
+              <input
+                type="date"
+                value={stage.deadline}
+                onChange={e => updateStage(i, 'deadline', e.target.value)}
+                className="bg-slate-800/80 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs text-slate-300 transition-colors flex-shrink-0"
+              />
+            </div>
+            {/* Tasks */}
+            <div className="p-4 bg-slate-900/40">
+              <textarea
+                value={stage.tasks}
+                onChange={e => updateStage(i, 'tasks', e.target.value)}
+                placeholder={def.hint}
+                rows={3}
+                className="w-full bg-transparent text-slate-100 placeholder-slate-600 text-sm leading-relaxed outline-none resize-none"
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -2798,6 +3030,10 @@ export default function ProjectPage() {
                 <BioStructureForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'highlights' ? (
                 <HighlightsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'kpi' ? (
+                <KpiForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'implementationStages' ? (
+                <RoadmapForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
