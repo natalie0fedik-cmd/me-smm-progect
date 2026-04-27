@@ -1673,17 +1673,51 @@ export default function ProjectPage() {
 
         {/* Progress */}
         <div className="mt-3">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <TrendingUp size={10} /> Заповненість
             </span>
             <span className="text-xs font-semibold text-indigo-400">{progress}%</span>
           </div>
-          <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
+
+          {/* Segmented bar — one segment per group */}
+          <div className="flex gap-0.5 h-2 mb-2.5">
+            {GROUPS.map((g) => {
+              const filled = groupFilled(g, project.data)
+              const pct = Math.round((filled / g.tabs.length) * 100)
+              return (
+                <div
+                  key={g.id}
+                  style={{ flex: g.tabs.length }}
+                  title={`${g.label}: ${pct}%`}
+                  className="bg-slate-700 rounded-sm overflow-hidden"
+                >
+                  <div
+                    className={`h-full transition-all duration-500 ${pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Per-section breakdown */}
+          <div className="text-xs leading-relaxed">
+            {GROUPS.map((g, i) => {
+              const pct = Math.round((groupFilled(g, project.data) / g.tabs.length) * 100)
+              return (
+                <span key={g.id}>
+                  {i > 0 && <span className="text-slate-700 mx-1">·</span>}
+                  <span className={pct === 100 ? 'text-emerald-400' : pct > 0 ? 'text-slate-300' : 'text-slate-600'}>
+                    {g.label}
+                  </span>
+                  {' '}
+                  <span className={pct === 100 ? 'text-emerald-500' : pct > 0 ? 'text-indigo-400' : 'text-slate-700'}>
+                    {pct}%
+                  </span>
+                </span>
+              )
+            })}
           </div>
         </div>
       </div>
