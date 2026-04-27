@@ -1051,7 +1051,8 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
 
 // ─── UVP structured form ─────────────────────────────────────────────────────
 
-interface UvpData { features: string[]; keyMessage: string; insight: string }
+interface UvpFeature { id: string; what: string; difference: string; proof: string }
+interface UvpData { features: UvpFeature[]; keyMessage: string; insight: string }
 
 const EMPTY_UVP: UvpData = { features: [], keyMessage: '', insight: '' }
 
@@ -1060,72 +1061,153 @@ function parseUvp(raw: string): UvpData {
   try {
     const p = JSON.parse(raw)
     if (!p || typeof p !== 'object') return JSON.parse(JSON.stringify(EMPTY_UVP))
+    const rawFeatures = Array.isArray(p.features) ? p.features : []
+    const features: UvpFeature[] = rawFeatures.map((f: unknown) => {
+      if (typeof f === 'string') return { id: crypto.randomUUID(), what: f, difference: '', proof: '' }
+      if (f && typeof f === 'object') {
+        const fo = f as Record<string, unknown>
+        return { id: String(fo.id ?? crypto.randomUUID()), what: String(fo.what ?? ''), difference: String(fo.difference ?? ''), proof: String(fo.proof ?? '') }
+      }
+      return { id: crypto.randomUUID(), what: '', difference: '', proof: '' }
+    })
     return {
-      features:   Array.isArray(p.features) ? p.features : [],
+      features,
       keyMessage: typeof p.keyMessage === 'string' ? p.keyMessage : '',
       insight:    typeof p.insight    === 'string' ? p.insight    : '',
     }
   } catch { return JSON.parse(JSON.stringify(EMPTY_UVP)) }
 }
 
+const UVP_EXAMPLES: UvpFeature[] = [
+  {
+    id: '',
+    what:       'Закріплюємо персонального менеджера за кожним клієнтом',
+    difference: 'Конкуренти передають клієнта між відділами — у нас одна точка контакту від старту до результату',
+    proof:      '98% клієнтів працюють з одним менеджером весь проєкт — підтверджено відгуками',
+  },
+  {
+    id: '',
+    what:       'Даємо гарантію: якщо не досягнемо узгодженого KPI — повертаємо оплату',
+    difference: 'Жоден конкурент у ніші не дає фінансових гарантій на результат',
+    proof:      'За 3 роки повернули кошти лише 2 клієнтам з 200+',
+  },
+  {
+    id: '',
+    what:       'Відповідаємо на будь-який запит клієнта протягом 1 робочої години',
+    difference: 'Стандарт ринку — 24–48 годин, ми відповідаємо за 43 хвилини в середньому',
+    proof:      'Середній час відповіді підтверджений статистикою CRM за останні 6 місяців',
+  },
+]
+
 function UvpForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
   const u = parseUvp(data.uvp)
   function save(next: UvpData) { updateField('uvp', JSON.stringify(next)) }
-  function addFeature() { save({ ...u, features: [...u.features, ''] }) }
-  function removeFeature(i: number) { save({ ...u, features: u.features.filter((_, idx) => idx !== i) }) }
-  function updateFeature(i: number, value: string) {
-    const f = [...u.features]; f[i] = value; save({ ...u, features: f })
+  function addFeature() {
+    save({ ...u, features: [...u.features, { id: crypto.randomUUID(), what: '', difference: '', proof: '' }] })
+  }
+  function removeFeature(id: string) { save({ ...u, features: u.features.filter(f => f.id !== id) }) }
+  function updateFeature(id: string, field: keyof UvpFeature, value: string) {
+    save({ ...u, features: u.features.map(f => f.id === id ? { ...f, [field]: value } : f) })
   }
 
   return (
     <div className="space-y-8">
       {/* Unique features */}
       <div>
-        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
-          <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">💎</span>
-          Унікальні особливості
-        </h3>
-        <div className="space-y-2">
+        <div className="flex items-start justify-between mb-4">
+          <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+            <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">💎</span>
+            Унікальні особливості
+          </h3>
+        </div>
+        <div className="space-y-3">
           {u.features.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-700 p-4 space-y-3 mb-1">
+            <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-300">Що відрізняє вас від конкурентів?</p>
-                <p className="text-xs text-slate-500">Пишіть конкретні факти, які клієнт може перевірити. «Якість» і «досвід» — не унікальність.</p>
+                <p className="text-xs text-slate-500">Для кожної особливості — три питання: що конкретно робимо, чим це відрізняється від конкурентів і яким доказом підтверджуємо. «Якість» і «досвід» без доказу — не унікальність.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {['Гарантія результату або повернення коштів', 'Відповідь клієнту протягом 1 години', '10+ років досвіду у ніші', 'Лише сертифіковані спеціалісти', 'Персональний менеджер на весь проєкт', 'Портфоліо 200+ успішних кейсів'].map(ex => (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Приклади</p>
+                {UVP_EXAMPLES.map((ex, i) => (
                   <button
-                    key={ex}
-                    onClick={() => save({ ...u, features: [...u.features, ex] })}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-indigo-500/10 border border-slate-700 hover:border-indigo-500/40 rounded-lg text-xs text-slate-400 hover:text-indigo-300 transition-all"
+                    key={i}
+                    onClick={() => save({ ...u, features: [...u.features, { ...ex, id: crypto.randomUUID() }] })}
+                    className="w-full text-left p-3 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all group space-y-1.5"
                   >
-                    <Plus size={10} /> {ex}
+                    <p className="text-xs text-slate-500"><span className="text-slate-400 font-medium">Що робимо: </span>{ex.what}</p>
+                    <p className="text-xs text-slate-500"><span className="text-slate-400 font-medium">Відмінність: </span>{ex.difference}</p>
+                    <p className="text-xs text-slate-500"><span className="text-emerald-600 font-medium">Доказ: </span>{ex.proof}</p>
                   </button>
                 ))}
               </div>
+              <button
+                onClick={addFeature}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Plus size={14} /> Додати власну особливість
+              </button>
             </div>
           )}
           {u.features.map((feature, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
-              <input
-                type="text"
-                value={feature}
-                onChange={e => updateFeature(i, e.target.value)}
-                placeholder="Унікальна особливість або перевага бренду"
-                className="flex-1 bg-slate-900/50 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
-              />
-              <button onClick={() => removeFeature(i)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
-                <X size={14} />
-              </button>
+            <div key={feature.id} className="bg-slate-900/50 border border-indigo-500/20 rounded-xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-indigo-500/5">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider flex-1">Особливість {i + 1}</span>
+                <button onClick={() => removeFeature(feature.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+              {/* Fields */}
+              <div className="p-4 space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" /> Що робимо
+                  </label>
+                  <input
+                    type="text"
+                    value={feature.what}
+                    onChange={e => updateFeature(feature.id, 'what', e.target.value)}
+                    placeholder="Конкретна дія або сервіс, який ми надаємо клієнту"
+                    className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block mr-1.5" /> Чим відрізняємось
+                  </label>
+                  <input
+                    type="text"
+                    value={feature.difference}
+                    onChange={e => updateFeature(feature.id, 'difference', e.target.value)}
+                    placeholder="Чому це рідкість на ринку, що роблять конкуренти замість цього"
+                    className="w-full bg-slate-800/60 border border-slate-700 focus:border-violet-500/60 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5" /> Доказ
+                  </label>
+                  <input
+                    type="text"
+                    value={feature.proof}
+                    onChange={e => updateFeature(feature.id, 'proof', e.target.value)}
+                    placeholder="Цифра, факт, відгук або кейс, який це підтверджує"
+                    className="w-full bg-slate-800/60 border border-slate-700 focus:border-emerald-500/60 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                  />
+                </div>
+              </div>
             </div>
           ))}
-          <button
-            onClick={addFeature}
-            className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
-          >
-            <Plus size={14} /> Додати особливість
-          </button>
+          {u.features.length > 0 && (
+            <button
+              onClick={addFeature}
+              className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={14} /> Додати особливість
+            </button>
+          )}
         </div>
       </div>
 
