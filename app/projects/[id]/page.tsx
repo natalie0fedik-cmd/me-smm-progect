@@ -181,21 +181,24 @@ const GROUPS: GroupDef[] = [
         label: 'Tone of Voice',
         number: '7.2',
         description: 'Голос і тон бренду: як говоримо, що уникаємо, приклади',
-        placeholder: 'Ми: [прикметники]\nМи НЕ: [що уникаємо]\n\nПриклади:\n— Так: "..."\n— Не так: "..."',
+        custom: true,
+        fields: ['toneOfVoice'],
       },
       {
         id: 'contentRubricator',
         label: 'Рубрикатор',
         number: '7.3',
         description: 'Категорії контенту, їх частота та мета',
-        placeholder: '📌 Рубрика 1 — [назва]\nМета: ...\nЧастота: ...\nФормат: ...\n\n📌 Рубрика 2 — ...',
+        custom: true,
+        fields: ['contentRubricator'],
       },
       {
         id: 'visualConcept',
         label: 'Візуал',
         number: '7.4',
         description: 'Колірна палітра, шрифти, стиль фото, настрій та референси',
-        placeholder: 'Колірна палітра: ...\nШрифти: ...\nСтиль фото: ...\nНастрій: ...\nРеференси: ...',
+        custom: true,
+        fields: ['visualConcept'],
       },
     ],
   },
@@ -1290,6 +1293,272 @@ function CommunicationPillarsForm({ data, updateField }: { data: ProjectData; up
   )
 }
 
+// ─── Tone of Voice form ───────────────────────────────────────────────────────
+
+interface ToneOfVoiceData {
+  formality: string
+  address: string
+  emotion: string
+  humor: string
+  position: string
+  notes: string
+}
+
+const EMPTY_TOV: ToneOfVoiceData = { formality: '', address: '', emotion: '', humor: '', position: '', notes: '' }
+
+function parseToneOfVoice(raw: string): ToneOfVoiceData {
+  if (!raw) return { ...EMPTY_TOV }
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return { ...EMPTY_TOV }
+    return { ...EMPTY_TOV, ...p }
+  } catch { return { ...EMPTY_TOV } }
+}
+
+function ToneToggle({ label, options, value, onChange }: { label: string; options: [string, string][]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-700/40 last:border-0">
+      <span className="text-sm text-slate-300 font-medium min-w-0">{label}</span>
+      <div className="flex gap-1 flex-shrink-0">
+        {options.map(([val, text]) => (
+          <button
+            key={val}
+            onClick={() => onChange(value === val ? '' : val)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              value === val
+                ? 'bg-indigo-600 border-indigo-500 text-white'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ToneOfVoiceForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const t = parseToneOfVoice(data.toneOfVoice)
+  function save(next: ToneOfVoiceData) { updateField('toneOfVoice', JSON.stringify(next)) }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-slate-900/50 border border-slate-700/60 rounded-xl px-5 py-2">
+        <ToneToggle label="Формальність"  options={[['informal','Неформально'], ['formal','Формально']]}          value={t.formality} onChange={v => save({ ...t, formality: v })} />
+        <ToneToggle label="Звертання"     options={[['ty','На «ти»'], ['vy','На «Ви»']]}                          value={t.address}   onChange={v => save({ ...t, address: v })} />
+        <ToneToggle label="Емоційність"   options={[['restrained','Стримано'], ['emotional','Емоційно']]}          value={t.emotion}   onChange={v => save({ ...t, emotion: v })} />
+        <ToneToggle label="Гумор"         options={[['use','Використовуємо'], ['avoid','Уникаємо']]}               value={t.humor}     onChange={v => save({ ...t, humor: v })} />
+        <ToneToggle label="Позиція"       options={[['expert','Експерт'], ['partner','Партнер']]}                  value={t.position}  onChange={v => save({ ...t, position: v })} />
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Додаткові нотатки</label>
+        <textarea
+          value={t.notes}
+          onChange={e => save({ ...t, notes: e.target.value })}
+          placeholder="Що ще важливо знати про стиль комунікації бренду: табу, особливі прийоми, приклади..."
+          rows={4}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── Content Rubricator form ──────────────────────────────────────────────────
+
+interface ContentRubric { id: string; name: string; frequency: string; format: string; goal: string }
+
+function parseRubricator(raw: string): ContentRubric[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function ContentRubricatorForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseRubricator(data.contentRubricator)
+  function save(next: ContentRubric[]) { updateField('contentRubricator', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), name: '', frequency: '', format: '', goal: '' }]) }
+  function remove(id: string) { save(list.filter(r => r.id !== id)) }
+  function update(id: string, field: keyof ContentRubric, value: string) {
+    save(list.map(r => r.id === id ? { ...r, [field]: value } : r))
+  }
+
+  return (
+    <div className="space-y-4">
+      {list.map((r, i) => (
+        <div key={r.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+            <span className="text-indigo-400 flex-shrink-0 text-sm">📌</span>
+            <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+            <input
+              type="text"
+              value={r.name}
+              onChange={e => update(r.id, 'name', e.target.value)}
+              placeholder="Назва рубрики"
+              className="flex-1 bg-transparent text-white text-sm font-semibold placeholder-slate-600 outline-none"
+            />
+            <button onClick={() => remove(r.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              ['frequency', 'Частота', '1 раз на тиждень'],
+              ['format',    'Формат',  'Reels, каруселі'],
+              ['goal',      'Мета',    'Залучення, продажі...'],
+            ] as [keyof ContentRubric, string, string][]).map(([field, label, ph]) => (
+              <div key={field}>
+                <label className="text-xs text-slate-500 uppercase tracking-wider mb-1 block">{label}</label>
+                <input
+                  type="text"
+                  value={r[field] as string}
+                  onChange={e => update(r.id, field, e.target.value)}
+                  placeholder={ph}
+                  className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати рубрику
+      </button>
+    </div>
+  )
+}
+
+// ─── Visual Concept form ──────────────────────────────────────────────────────
+
+interface VisualConceptData {
+  style: string
+  colorMain: string
+  colorSecondary: string
+  colorAccent: string
+  fontHeadings: string
+  fontBody: string
+  references: string
+}
+
+const EMPTY_VISUAL: VisualConceptData = { style: '', colorMain: '#ffffff', colorSecondary: '#ffffff', colorAccent: '#ffffff', fontHeadings: '', fontBody: '', references: '' }
+
+function parseVisualConcept(raw: string): VisualConceptData {
+  if (!raw) return { ...EMPTY_VISUAL }
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return { ...EMPTY_VISUAL }
+    return { ...EMPTY_VISUAL, ...p }
+  } catch { return { ...EMPTY_VISUAL } }
+}
+
+const STYLE_OPTIONS = ['Мінімалізм', 'Яскравий', 'Елегантний', 'Натуральний', 'Технологічний', 'Ретро', 'Інший']
+
+function VisualConceptForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const v = parseVisualConcept(data.visualConcept)
+  function save(next: VisualConceptData) { updateField('visualConcept', JSON.stringify(next)) }
+
+  return (
+    <div className="space-y-6">
+      {/* Style */}
+      <div>
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Стиль</label>
+        <div className="flex flex-wrap gap-2">
+          {STYLE_OPTIONS.map(s => (
+            <button
+              key={s}
+              onClick={() => save({ ...v, style: v.style === s ? '' : s })}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                v.style === s
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        {v.style === 'Інший' && (
+          <input
+            type="text"
+            value={v.style === 'Інший' ? '' : v.style}
+            onChange={e => save({ ...v, style: e.target.value })}
+            placeholder="Опишіть стиль..."
+            className="mt-2 w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+          />
+        )}
+      </div>
+
+      {/* Colors */}
+      <div className="border-t border-slate-700/50 pt-5">
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Кольорова гама</label>
+        <div className="grid grid-cols-3 gap-4">
+          {([
+            ['colorMain',      'Основний'],
+            ['colorSecondary', 'Додатковий'],
+            ['colorAccent',    'Акцентний'],
+          ] as [keyof VisualConceptData, string][]).map(([field, label]) => (
+            <div key={field} className="flex flex-col items-center gap-2">
+              <label className="text-xs text-slate-500">{label}</label>
+              <div className="relative">
+                <input
+                  type="color"
+                  value={v[field] as string}
+                  onChange={e => save({ ...v, [field]: e.target.value })}
+                  className="w-12 h-12 rounded-xl border-2 border-slate-700 cursor-pointer bg-transparent p-0.5"
+                />
+              </div>
+              <span className="text-xs text-slate-500 font-mono">{v[field] as string}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fonts */}
+      <div className="border-t border-slate-700/50 pt-5">
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 block">Шрифти</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Заголовки</label>
+            <input
+              type="text"
+              value={v.fontHeadings}
+              onChange={e => save({ ...v, fontHeadings: e.target.value })}
+              placeholder="Montserrat Bold"
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Основний текст</label>
+            <input
+              type="text"
+              value={v.fontBody}
+              onChange={e => save({ ...v, fontBody: e.target.value })}
+              placeholder="Inter Regular"
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* References */}
+      <div className="border-t border-slate-700/50 pt-5">
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Референси</label>
+        <textarea
+          value={v.references}
+          onChange={e => save({ ...v, references: e.target.value })}
+          placeholder="Посилання на акаунти, мудборди, приклади, які надихають..."
+          rows={3}
+          className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm leading-relaxed transition-colors resize-none"
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -1581,6 +1850,12 @@ export default function ProjectPage() {
                 <BrandEnemiesForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'communicationPillars' ? (
                 <CommunicationPillarsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'toneOfVoice' ? (
+                <ToneOfVoiceForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'contentRubricator' ? (
+                <ContentRubricatorForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'visualConcept' ? (
+                <VisualConceptForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
