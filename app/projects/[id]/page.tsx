@@ -245,14 +245,16 @@ const GROUPS: GroupDef[] = [
         label: 'БІО',
         number: '9.1',
         description: 'Текст біо для профілю: хто, для кого, що, заклик до дії',
-        placeholder: 'Рядок 1: [хто ми / що робимо]\nРядок 2: [для кого]\nРядок 3: [результат / перевага]\nРядок 4: [CTA + посилання]',
+        custom: true,
+        fields: ['bioStructure'],
       },
       {
         id: 'highlights',
         label: 'Highlights',
         number: '9.2',
         description: 'Актуальні сторіс: назви, порядок, зміст кожного хайлайту',
-        placeholder: '📁 Хайлайт 1 — [назва]\nЗміст: ...\n\n📁 Хайлайт 2 — [назва]\nЗміст: ...',
+        custom: true,
+        fields: ['highlights'],
       },
     ],
   },
@@ -2227,6 +2229,234 @@ function SalesFunnelsForm({ data, updateField }: { data: ProjectData; updateFiel
   )
 }
 
+// ─── Bio Structure form ───────────────────────────────────────────────────────
+
+interface BioData {
+  emoji: string
+  who: string
+  forWhom: string
+  uvp: string
+  cta: string
+  link: string
+}
+
+const EMPTY_BIO: BioData = { emoji: '', who: '', forWhom: '', uvp: '', cta: '', link: '' }
+
+function parseBio(raw: string): BioData {
+  if (!raw) return { ...EMPTY_BIO }
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return { ...EMPTY_BIO }
+    return { ...EMPTY_BIO, ...p }
+  } catch { return { ...EMPTY_BIO } }
+}
+
+const BIO_FIELDS: { key: keyof BioData; label: string; placeholder: string; hint: string }[] = [
+  { key: 'emoji',   label: 'Емоджі бренду',   placeholder: '✨🔥💎',                                        hint: '1–3 символи, що відображають характер бренду' },
+  { key: 'who',     label: 'Хто ми / що робимо', placeholder: 'SMM-агенція для fashion-брендів',              hint: 'Рядок 1 — чітко і конкретно' },
+  { key: 'forWhom', label: 'Для кого',          placeholder: 'Допомагаємо малому бізнесу рости в соцмережах', hint: 'Рядок 2 — аудиторія і результат' },
+  { key: 'uvp',     label: 'УЦП / перевага',    placeholder: 'Без шаблонів — тільки стратегія під вас',       hint: 'Рядок 3 — чим відрізняємось' },
+  { key: 'cta',     label: 'Заклик до дії',     placeholder: '👇 Безкоштовна консультація',                   hint: 'Рядок 4 — що зробити прямо зараз' },
+  { key: 'link',    label: 'Посилання',          placeholder: 'linktr.ee/yourbrand',                           hint: 'URL в шапці профілю' },
+]
+
+function BioStructureForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const b = parseBio(data.bioStructure)
+  function save(next: BioData) { updateField('bioStructure', JSON.stringify(next)) }
+
+  const preview = [b.emoji, b.who, b.forWhom, b.uvp, b.cta].filter(Boolean).join('\n')
+
+  return (
+    <div className="space-y-6">
+      {/* Fields */}
+      <div className="space-y-4">
+        {BIO_FIELDS.map(({ key, label, placeholder, hint }) => (
+          <div key={key}>
+            <div className="flex items-baseline justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-400 tracking-wider">{label}</label>
+              <span className="text-xs text-slate-600">{hint}</span>
+            </div>
+            <input
+              type="text"
+              value={b[key]}
+              onChange={e => save({ ...b, [key]: e.target.value })}
+              placeholder={placeholder}
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Live preview */}
+      {preview && (
+        <div className="border-t border-slate-700/50 pt-5">
+          <p className="text-xs font-semibold text-slate-400 tracking-wider mb-3">Попередній перегляд</p>
+          <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 max-w-xs">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-xl flex-shrink-0">
+                {b.emoji || '👤'}
+              </div>
+              <div>
+                <div className="text-white text-sm font-semibold">Ім'я профілю</div>
+                <div className="text-slate-400 text-xs">@username</div>
+              </div>
+            </div>
+            <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-line">{preview}</div>
+            {b.link && (
+              <div className="mt-2 text-indigo-400 text-xs">{b.link}</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Highlights form ──────────────────────────────────────────────────────────
+
+interface Highlight { id: string; name: string; icon: string; content: string; updateFrequency: string }
+
+function parseHighlights(raw: string): Highlight[] {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+const HIGHLIGHT_EXAMPLES: Highlight[] = [
+  { id: '', name: 'Про нас',   icon: '💼', content: 'Команда, місія, цінності, історія бренду',            updateFrequency: 'За потреби' },
+  { id: '', name: 'Відгуки',  icon: '⭐', content: 'Скріншоти відгуків, подяки клієнтів, оцінки',         updateFrequency: '1–2 рази на тиждень' },
+  { id: '', name: 'Послуги',  icon: '📋', content: 'Перелік послуг, ціни, умови, формати роботи',          updateFrequency: 'Щомісяця' },
+  { id: '', name: 'Кейси',    icon: '🏆', content: 'Результати клієнтів, до/після, цифри',                 updateFrequency: 'Після кожного кейсу' },
+  { id: '', name: 'FAQ',      icon: '❓', content: 'Відповіді на часті питання, заперечення, ціни',        updateFrequency: 'За потреби' },
+  { id: '', name: 'Акції',    icon: '🎁', content: 'Поточні акції, знижки, обмежені пропозиції',           updateFrequency: 'На час акції' },
+]
+
+function HighlightsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
+  const list = parseHighlights(data.highlights)
+  function save(next: Highlight[]) { updateField('highlights', JSON.stringify(next)) }
+  function add() { save([...list, { id: crypto.randomUUID(), name: '', icon: '', content: '', updateFrequency: '' }]) }
+  function remove(id: string) { save(list.filter(h => h.id !== id)) }
+  function update(id: string, field: keyof Highlight, value: string) {
+    save(list.map(h => h.id === id ? { ...h, [field]: value } : h))
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Circle preview row */}
+      {list.length > 0 && (
+        <div className="flex flex-wrap gap-3 pb-4 border-b border-slate-700/50">
+          {list.map(h => (
+            <div key={h.id} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 rounded-full border-2 border-indigo-500/50 bg-slate-800 flex items-center justify-center text-xl">
+                {h.icon || '📁'}
+              </div>
+              <span className="text-xs text-slate-400 max-w-[56px] text-center truncate">{h.name || '...'}</span>
+            </div>
+          ))}
+          <button
+            onClick={add}
+            className="w-14 h-14 rounded-full border-2 border-dashed border-slate-700 hover:border-indigo-500/50 flex items-center justify-center text-slate-600 hover:text-indigo-400 transition-all self-start"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {list.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Які хайлайти потрібні профілю?</p>
+            <p className="text-xs text-slate-500">Хайлайти — це постійні розділи профілю. 4–6 хайлайтів дають новому відвідувачу повну картину бренду за 10 секунд.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Популярні хайлайти</p>
+            {HIGHLIGHT_EXAMPLES.map(ex => (
+              <button
+                key={ex.name}
+                onClick={() => save([...list, { ...ex, id: crypto.randomUUID() }])}
+                className="w-full flex items-center gap-3 p-3 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all group"
+              >
+                <div className="w-10 h-10 rounded-full border-2 border-slate-600 group-hover:border-indigo-500/50 bg-slate-700 flex items-center justify-center text-lg flex-shrink-0 transition-colors">
+                  {ex.icon}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">{ex.name}</p>
+                  <p className="text-xs text-slate-500">{ex.content}</p>
+                </div>
+                <span className="text-xs text-slate-600 flex-shrink-0">{ex.updateFrequency}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати власний хайлайт
+          </button>
+        </div>
+      )}
+
+      {/* List */}
+      {list.map((h, i) => (
+        <div key={h.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-800/40">
+            <input
+              type="text"
+              value={h.icon}
+              onChange={e => update(h.id, 'icon', e.target.value)}
+              placeholder="📁"
+              className="w-8 bg-transparent text-center text-lg outline-none flex-shrink-0"
+              maxLength={2}
+            />
+            <input
+              type="text"
+              value={h.name}
+              onChange={e => update(h.id, 'name', e.target.value)}
+              placeholder="Назва хайлайту"
+              className="flex-1 bg-transparent text-white text-sm font-semibold placeholder-slate-600 outline-none"
+            />
+            <span className="text-xs text-slate-600 flex-shrink-0">#{i + 1}</span>
+            <button onClick={() => remove(h.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 tracking-wider mb-1 block">Зміст</label>
+              <textarea
+                value={h.content}
+                onChange={e => update(h.id, 'content', e.target.value)}
+                placeholder="Що публікуємо у цей хайлайт..."
+                rows={2}
+                className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 tracking-wider mb-1 block">Частота оновлення</label>
+              <input
+                type="text"
+                value={h.updateFrequency}
+                onChange={e => update(h.id, 'updateFrequency', e.target.value)}
+                placeholder="1–2 рази на тиждень / за потреби"
+                className="w-full bg-slate-800/60 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {list.length > 0 && (
+        <button
+          onClick={add}
+          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Додати хайлайт
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -2564,6 +2794,10 @@ export default function ProjectPage() {
                 <OrganicToolsForm data={project.data} updateField={updateField} />
               ) : activeTab.custom && activeTab.id === 'salesFunnels' ? (
                 <SalesFunnelsForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'bioStructure' ? (
+                <BioStructureForm data={project.data} updateField={updateField} />
+              ) : activeTab.custom && activeTab.id === 'highlights' ? (
+                <HighlightsForm data={project.data} updateField={updateField} />
               ) : (
                 <textarea
                   value={project.data[activeTab.id as keyof ProjectData] || ''}
