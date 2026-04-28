@@ -2,9 +2,217 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock } from 'lucide-react'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2 } from 'lucide-react'
 import { Project, CalendarEvent, CalendarEventType } from '@/types'
 import { getProjects, createProject, deleteProject, getProgress, getCalendarEvents, saveCalendarEvents } from '@/lib/storage'
+
+// ─── Shared mini-parsers (mirror of project page) ────────────────────────────
+
+function parseKpiGlobal(raw: string): Array<{ id: string; name: string; target: string; current: string; period: string }> {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+function parseReportsGlobal(raw: string): Array<{ id: string; month: string; actuals: Record<string, string>; notes: string }> {
+  if (!raw) return []
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function exportProjectCsv(kpis: ReturnType<typeof parseKpiGlobal>, reports: ReturnType<typeof parseReportsGlobal>, name: string) {
+  const headers = ['Місяць', ...kpis.flatMap(k => [`${k.name} (план)`, `${k.name} (факт)`]), 'Нотатки']
+  const rows = [...reports].sort((a, b) => a.month.localeCompare(b.month)).map(r => [
+    r.month,
+    ...kpis.flatMap(k => [k.target, r.actuals[k.name] ?? '']),
+    r.notes,
+  ])
+  const csv = [headers, ...rows].map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `${name.replace(/\s+/g, '_')}_analytics.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
+
+const MONTHS_UK_SHORT = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру']
+function fmtMonth(m: string) {
+  const [y, mo] = m.split('-')
+  return `${MONTHS_UK_SHORT[parseInt(mo) - 1]} ${y}`
+}
+
+// ─── Analytics view ───────────────────────────────────────────────────────────
+
+function AnalyticsView({ projects }: { projects: Project[] }) {
+  const [filterProject, setFilterProject] = useState('')
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const router = useRouter()
+
+  const enriched = projects.map(p => ({
+    project: p,
+    kpis: parseKpiGlobal(p.data.kpi),
+    reports: parseReportsGlobal(p.data.monthlyReports).sort((a, b) => b.month.localeCompare(a.month)),
+  }))
+
+  const withData = enriched.filter(d => d.kpis.length > 0)
+  const noData   = enriched.filter(d => d.kpis.length === 0)
+  const filtered = filterProject ? withData.filter(d => d.project.id === filterProject) : withData
+
+  const totalMonths = withData.reduce((acc, d) => acc + d.reports.length, 0)
+
+  return (
+    <div className="space-y-6">
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Проєктів з KPI',     value: withData.length,  sub: `з ${projects.length} всього` },
+          { label: 'Місяців залоговано',  value: totalMonths,       sub: 'звітів у всіх проєктах' },
+          { label: 'KPI відстежується',  value: withData.reduce((a, d) => a + d.kpis.length, 0), sub: 'показників сумарно' },
+        ].map(({ label, value, sub }) => (
+          <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
+            <p className="text-3xl font-bold text-white mb-1">{value}</p>
+            <p className="text-sm font-medium text-slate-300">{label}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter */}
+      {withData.length > 1 && (
+        <select
+          value={filterProject}
+          onChange={e => setFilterProject(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none"
+        >
+          <option value="">Всі проєкти</option>
+          {withData.map(d => <option key={d.project.id} value={d.project.id}>{d.project.emoji} {d.project.name}</option>)}
+        </select>
+      )}
+
+      {/* No data state */}
+      {withData.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-10 text-center space-y-3">
+          <p className="text-2xl">📊</p>
+          <p className="text-sm font-medium text-slate-300">Ще немає аналітики</p>
+          <p className="text-xs text-slate-500">Відкрийте проєкт → розділ KPI → заповніть показники, потім перейдіть до розділу Аналітика</p>
+        </div>
+      )}
+
+      {/* Project analytics cards */}
+      {filtered.map(({ project, kpis, reports }) => {
+        const isOpen = expanded[project.id] !== false
+        const latestReport = reports[0]
+        const factFilled = latestReport ? kpis.filter(k => latestReport.actuals[k.name]?.trim()).length : 0
+
+        return (
+          <div key={project.id} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden">
+            {/* Project header */}
+            <div
+              className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-slate-700/30 transition-colors"
+              onClick={() => setExpanded(ex => ({ ...ex, [project.id]: !isOpen }))}
+            >
+              <span className="text-2xl">{project.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold">{project.name}</p>
+                <p className="text-xs text-slate-500">{kpis.length} KPI · {reports.length} місяців · {latestReport ? `Останній: ${fmtMonth(latestReport.month)}` : 'Немає звітів'}</p>
+              </div>
+              {reports.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-slate-500">{factFilled}/{kpis.length} факт заповнено</div>
+                  <div className="w-20 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${kpis.length ? (factFilled / kpis.length) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2 ml-2">
+                <button
+                  onClick={e => { e.stopPropagation(); exportProjectCsv(kpis, reports, project.name) }}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                >
+                  ⬇ CSV
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); router.push(`/projects/${project.id}`) }}
+                  className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors"
+                >
+                  Відкрити →
+                </button>
+                <span className="text-slate-600 text-xs ml-1">{isOpen ? '▲' : '▼'}</span>
+              </div>
+            </div>
+
+            {/* Reports table */}
+            {isOpen && (
+              <div className="border-t border-slate-700/50 overflow-x-auto">
+                {reports.length === 0 ? (
+                  <p className="text-xs text-slate-600 px-5 py-4">Немає місячних звітів — додайте їх у розділі «Аналітика» проєкту</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-700/50">
+                        <th className="text-left px-5 py-2.5 text-slate-500 font-semibold whitespace-nowrap">Місяць</th>
+                        {kpis.map(k => (
+                          <th key={k.id} colSpan={2} className="text-center px-3 py-2.5 text-slate-500 font-semibold whitespace-nowrap border-l border-slate-700/30">
+                            {k.name}
+                          </th>
+                        ))}
+                        <th className="text-left px-3 py-2.5 text-slate-500 font-semibold border-l border-slate-700/30">Нотатки</th>
+                      </tr>
+                      <tr className="border-b border-slate-700/30 bg-slate-900/30">
+                        <th className="px-5 py-1.5" />
+                        {kpis.map(k => (
+                          <>
+                            <th key={`${k.id}-plan`} className="text-center px-2 py-1.5 text-slate-600 font-normal border-l border-slate-700/30">план</th>
+                            <th key={`${k.id}-fact`} className="text-center px-2 py-1.5 text-slate-600 font-normal">факт</th>
+                          </>
+                        ))}
+                        <th className="border-l border-slate-700/30" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reports.map((r, ri) => (
+                        <tr key={r.id} className={`border-b border-slate-700/20 ${ri % 2 === 0 ? '' : 'bg-slate-900/20'}`}>
+                          <td className="px-5 py-2.5 text-slate-300 font-medium whitespace-nowrap">{fmtMonth(r.month)}</td>
+                          {kpis.map(k => {
+                            const fact = r.actuals[k.name] ?? ''
+                            return (
+                              <>
+                                <td key={`${k.id}-p`} className="text-center px-2 py-2.5 text-slate-500 border-l border-slate-700/20 whitespace-nowrap">{k.target}</td>
+                                <td key={`${k.id}-f`} className="text-center px-2 py-2.5 whitespace-nowrap font-medium" style={{ color: fact ? '#6ee7b7' : '#475569' }}>
+                                  {fact || '—'}
+                                </td>
+                              </>
+                            )
+                          })}
+                          <td className="px-3 py-2.5 text-slate-500 max-w-[180px] truncate border-l border-slate-700/20">{r.notes || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Projects without KPI */}
+      {noData.length > 0 && !filterProject && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-600 uppercase tracking-wider font-semibold">Проєкти без KPI</p>
+          {noData.map(({ project }) => (
+            <div key={project.id} className="flex items-center gap-3 px-4 py-3 bg-slate-800/30 border border-slate-700/30 rounded-xl">
+              <span>{project.emoji}</span>
+              <span className="text-sm text-slate-500 flex-1">{project.name}</span>
+              <button
+                onClick={() => router.push(`/projects/${project.id}`)}
+                className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Заповнити KPI →
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Calendar config ──────────────────────────────────────────────────────────
 
@@ -312,7 +520,7 @@ const EMOJI_OPTIONS = ['🚀', '💼', '🎯', '✨', '🌿', '🔥', '💡', '�
 export default function HomePage() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
-  const [activeTab, setActiveTab] = useState<'projects' | 'calendar'>('projects')
+  const [activeTab, setActiveTab] = useState<'projects' | 'calendar' | 'analytics'>('projects')
   const [showModal, setShowModal] = useState(false)
   const [newName, setNewName] = useState('')
   const [newEmoji, setNewEmoji] = useState('🚀')
@@ -365,6 +573,12 @@ export default function HomePage() {
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${activeTab === 'calendar' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               <Calendar size={14} /> Календар
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${activeTab === 'analytics' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              <BarChart2 size={14} /> Аналітика
             </button>
           </nav>
 
@@ -462,6 +676,17 @@ export default function HomePage() {
               <p className="text-slate-400">Плануйте наради, зйомки, контент і публікації</p>
             </div>
             <CalendarView projects={projects} />
+          </>
+        )}
+
+        {/* ── Analytics tab ── */}
+        {activeTab === 'analytics' && (
+          <>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-white mb-2">Аналітика</h1>
+              <p className="text-slate-400">Зведені звіти по всіх проєктах: план vs факт</p>
+            </div>
+            <AnalyticsView projects={projects} />
           </>
         )}
       </main>
