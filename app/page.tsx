@@ -536,7 +536,24 @@ function CalendarView({ projects }: { projects: Project[] }) {
       </div>
 
       {/* Calendar grid */}
-      <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden">
+      <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden relative">
+        {/* Empty state overlay */}
+        {events.length === 0 && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-[2px] rounded-2xl">
+            <div className="text-center">
+              <p className="text-3xl mb-3">🗓️</p>
+              <p className="text-slate-300 font-semibold text-base mb-1">Календар порожній</p>
+              <p className="text-slate-500 text-sm mb-5">Додай першу подію — нараду, зйомку або публікацію</p>
+              <button
+                onClick={() => openAdd(today)}
+                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+              >
+                <Plus size={15} /> Додати подію
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Weekday headers */}
         <div className="grid grid-cols-7 border-b border-slate-700/60">
           {WEEKDAYS.map(d => (
