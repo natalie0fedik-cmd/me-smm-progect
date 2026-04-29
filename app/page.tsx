@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, type LucideIcon } from 'lucide-react'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, type LucideIcon } from 'lucide-react'
 import { Project, ProjectData, CalendarEvent, CalendarEventType } from '@/types'
 import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents } from '@/lib/storage'
 
@@ -455,6 +455,7 @@ function CalendarView({ projects }: { projects: Project[] }) {
   })
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [filterProject, setFilterProject] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
   const [form, setForm] = useState<{ open: boolean; date: string; editing: CalendarEvent | null }>({ open: false, date: '', editing: null })
   const [draft, setDraft] = useState<Omit<CalendarEvent, 'id'>>({ title: '', date: '', time: '', type: 'publish', projectId: '', notes: '' })
 
@@ -515,6 +516,15 @@ function CalendarView({ projects }: { projects: Project[] }) {
 
   const HOURS = Array.from({length:14}, (_,i)=>i+8) // 8..21
 
+  function evStyle(ev: CalendarEvent) {
+    if (!filterProject && ev.projectId) {
+      const c = getProjectColor(ev.projectId)
+      return { bg: c+'25', border: c+'60', text: c, icon: EVENT_TYPE_CONFIG[ev.type].icon }
+    }
+    const cfg = EVENT_TYPE_CONFIG[ev.type]
+    return { bg: cfg.bg, border: cfg.border, text: cfg.text, icon: cfg.icon }
+  }
+
   const allFutureEvents = filtered
     .filter(e=>e.date>=today)
     .sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.time||'').localeCompare(b.time||''))
@@ -549,11 +559,36 @@ function CalendarView({ projects }: { projects: Project[] }) {
           </div>
         )}
 
-        <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer">
-          <option value="">Всі проєкти</option>
-          {projects.map(p=><option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-        </select>
+        <div className="relative">
+          {filterOpen&&<div className="fixed inset-0 z-10" onClick={()=>setFilterOpen(false)}/>}
+          <button onClick={()=>setFilterOpen(o=>!o)}
+            className="flex items-center gap-2 bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-300 transition-colors">
+            {filterProject ? (
+              <>
+                <span style={{width:8,height:8,borderRadius:4,backgroundColor:getProjectColor(filterProject),flexShrink:0,display:'inline-block'}}/>
+                <span className="max-w-[120px] truncate">{projects.find(p=>p.id===filterProject)?.emoji} {projects.find(p=>p.id===filterProject)?.name}</span>
+                <span onClick={e=>{e.stopPropagation();setFilterProject('');setFilterOpen(false)}} className="text-slate-500 hover:text-slate-300 cursor-pointer"><X size={11}/></span>
+              </>
+            ) : <span>Всі проєкти</span>}
+            <ChevronDown size={12} className="text-slate-500 flex-shrink-0"/>
+          </button>
+          {filterOpen&&(
+            <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl py-1 z-20 min-w-[190px] shadow-xl">
+              <button onClick={()=>{setFilterProject('');setFilterOpen(false)}}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${!filterProject?'text-white bg-slate-700/50':'text-slate-400 hover:bg-slate-700/30'}`}>
+                <span style={{width:8,height:8,borderRadius:4,backgroundColor:'#374151',display:'inline-block',flexShrink:0}}/>
+                Всі проєкти
+              </button>
+              {projects.map(p=>(
+                <button key={p.id} onClick={()=>{setFilterProject(p.id);setFilterOpen(false)}}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${filterProject===p.id?'text-white bg-slate-700/50':'text-slate-400 hover:bg-slate-700/30'}`}>
+                  <span style={{width:8,height:8,borderRadius:4,backgroundColor:getProjectColor(p.id),display:'inline-block',flexShrink:0}}/>
+                  {p.emoji} {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button onClick={()=>openAdd(today)}
           className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
@@ -593,12 +628,12 @@ function CalendarView({ projects }: { projects: Project[] }) {
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1 ${isToday?'bg-indigo-600 text-white':isWeekend?'text-slate-500':'text-slate-400'}`}>{day}</div>
                   <div className="space-y-0.5">
                     {dayEvents.slice(0,3).map(ev=>{
-                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      const s=evStyle(ev)
                       return (
                         <div key={ev.id} onClick={e=>openEdit(ev,e)}
                           className="rounded px-1.5 py-0.5 text-[11px] leading-tight truncate border cursor-pointer hover:opacity-80 transition-opacity"
-                          style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
-                          {cfg.icon} {ev.title}
+                          style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
+                          {s.icon} {ev.title}
                         </div>
                       )
                     })}
@@ -637,12 +672,12 @@ function CalendarView({ projects }: { projects: Project[] }) {
                 return (
                   <div key={d.iso} className={`border-r border-slate-700/30 last:border-r-0 p-1 min-h-[28px] ${d.isWeekend?'bg-slate-900/10':''}`}>
                     {allDay.map(ev=>{
-                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      const s=evStyle(ev)
                       return (
                         <div key={ev.id} onClick={e=>openEdit(ev,e)}
                           className="rounded px-1.5 py-0.5 text-[11px] truncate border cursor-pointer hover:opacity-80 mb-0.5"
-                          style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
-                          {cfg.icon} {ev.title}
+                          style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
+                          {s.icon} {ev.title}
                         </div>
                       )
                     })}
@@ -668,12 +703,12 @@ function CalendarView({ projects }: { projects: Project[] }) {
                     <div key={d.iso} onClick={()=>openAdd(d.iso,`${String(h).padStart(2,'0')}:00`)}
                       className={`border-r border-slate-700/20 last:border-r-0 p-0.5 cursor-pointer hover:bg-slate-700/20 transition-colors ${d.isWeekend?'bg-slate-900/10':''}`}>
                       {hourEvents.map(ev=>{
-                        const cfg=EVENT_TYPE_CONFIG[ev.type]
+                        const s=evStyle(ev)
                         return (
                           <div key={ev.id} onClick={e=>openEdit(ev,e)}
                             className="rounded px-1.5 py-1 text-[11px] border cursor-pointer hover:opacity-80 mb-0.5"
-                            style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
-                            <span className="font-semibold">{ev.time}</span> {cfg.icon} <span className="truncate">{ev.title}</span>
+                            style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
+                            <span className="font-semibold">{ev.time}</span> {s.icon} <span className="truncate">{ev.title}</span>
                           </div>
                         )
                       })}
@@ -722,20 +757,20 @@ function CalendarView({ projects }: { projects: Project[] }) {
                   </div>
                   <div className="space-y-2">
                     {evs.map(ev=>{
-                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      const s=evStyle(ev)
                       const proj=projects.find(p=>p.id===ev.projectId)
                       return (
                         <div key={ev.id} onClick={e=>openEdit(ev,e)}
                           className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity"
-                          style={{backgroundColor:cfg.bg,borderColor:cfg.border}}>
-                          <span className="text-base flex-shrink-0">{cfg.icon}</span>
+                          style={{backgroundColor:s.bg,borderColor:s.border}}>
+                          <span className="text-base flex-shrink-0">{s.icon}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm" style={{color:cfg.text}}>{ev.title}</p>
+                            <p className="font-medium text-sm" style={{color:s.text}}>{ev.title}</p>
                             {ev.notes&&<p className="text-xs text-slate-500 truncate mt-0.5">{ev.notes}</p>}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            {ev.time&&<span className="text-xs font-semibold" style={{color:cfg.text}}>{ev.time}</span>}
-                            {proj&&<span className="text-xs text-slate-500">{proj.emoji} {proj.name}</span>}
+                            {ev.time&&<span className="text-xs font-semibold" style={{color:s.text}}>{ev.time}</span>}
+                            {proj&&!filterProject&&<span className="text-xs text-slate-500">{proj.emoji} {proj.name}</span>}
                           </div>
                         </div>
                       )
