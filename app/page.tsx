@@ -1185,13 +1185,16 @@ function NavBtn({label,Icon,active,onClick}:{label:string;Icon:LucideIcon;active
   )
 }
 
-function Sidebar({active,onNav}:{active:NavView;onNav:(v:NavView)=>void}) {
-  const items:[NavView,string,LucideIcon][]=[
+function Sidebar({active,onNav,projects}:{active:NavView;onNav:(v:NavView)=>void;projects:Project[]}) {
+  const router = useRouter()
+  const [projOpen, setProjOpen] = useState(true)
+
+  const topItems:[NavView,string,LucideIcon][]=[
     ['dashboard','Дашборд',LayoutDashboard],
-    ['projects','Проєкти',FolderOpen],
     ['calendar','Контент-планер',CalendarDays],
     ['analytics','Аналітика',BarChart2],
   ]
+
   return (
     <aside style={{width:242,flexShrink:0,backgroundColor:'#04090f',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,borderRight:'1px solid rgba(255,255,255,0.05)'}}>
       <div style={{padding:'20px 16px 16px'}}>
@@ -1205,10 +1208,75 @@ function Sidebar({active,onNav}:{active:NavView;onNav:(v:NavView)=>void}) {
           </div>
         </div>
       </div>
+
       <nav style={{flex:1,padding:'8px',overflowY:'auto'}}>
-        {items.map(([id,label,Icon])=>(
-          <NavBtn key={id} label={label} Icon={Icon} active={active===id} onClick={()=>onNav(id)}/>
-        ))}
+        <NavBtn label="Дашборд" Icon={LayoutDashboard} active={active==='dashboard'} onClick={()=>onNav('dashboard')}/>
+
+        {/* Projects with expandable sub-list */}
+        <div style={{marginBottom:2}}>
+          <div style={{display:'flex',alignItems:'center',borderRadius:10,overflow:'hidden'}}>
+            <button
+              onClick={()=>onNav('projects')}
+              style={{flex:1,display:'flex',alignItems:'center',gap:10,padding:'9px 8px 9px 12px',border:'none',cursor:'pointer',
+                backgroundColor:active==='projects'?'rgba(37,99,235,0.18)':'transparent',
+                color:active==='projects'?'#60a5fa':'#4b5563',fontWeight:active==='projects'?600:400,fontSize:14,textAlign:'left',transition:'all 0.12s'}}>
+              <FolderOpen size={17}/>
+              <span style={{flex:1}}>Проєкти</span>
+              {active==='projects'&&<span style={{width:6,height:6,borderRadius:3,backgroundColor:'#3b82f6',flexShrink:0,marginRight:4}}/>}
+            </button>
+            <button
+              onClick={()=>setProjOpen(o=>!o)}
+              style={{padding:'9px 10px',border:'none',cursor:'pointer',backgroundColor:'transparent',
+                color:'#374151',transition:'color 0.12s,transform 0.15s',
+                transform:projOpen?'rotate(90deg)':'rotate(0deg)'}}
+              onMouseEnter={e=>(e.currentTarget.style.color='#6b7280')}
+              onMouseLeave={e=>(e.currentTarget.style.color='#374151')}>
+              <ChevronRight size={14}/>
+            </button>
+          </div>
+
+          {/* Sub-items */}
+          {projOpen && projects.length > 0 && (
+            <div style={{paddingLeft:12,marginTop:1}}>
+              {projects.map(p=>{
+                const color = getProjectColor(p.id)
+                return (
+                  <button key={p.id}
+                    onClick={()=>router.push(`/projects/${p.id}`)}
+                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'none',cursor:'pointer',
+                      backgroundColor:'transparent',transition:'background 0.1s',textAlign:'left',marginBottom:1}}
+                    onMouseEnter={e=>(e.currentTarget.style.backgroundColor='rgba(255,255,255,0.04)')}
+                    onMouseLeave={e=>(e.currentTarget.style.backgroundColor='transparent')}>
+                    <span style={{width:7,height:7,borderRadius:3.5,backgroundColor:color,flexShrink:0}}/>
+                    <span style={{fontSize:12,color:'#4b5563',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
+                      {p.name}
+                    </span>
+                    <span style={{fontSize:10,color:'#1f2937',flexShrink:0}}>
+                      {getProgress(p.data)}%
+                    </span>
+                  </button>
+                )
+              })}
+              {projects.length === 0 && (
+                <p style={{fontSize:12,color:'#1f2937',padding:'4px 10px'}}>Немає проєктів</p>
+              )}
+            </div>
+          )}
+
+          {projOpen && projects.length === 0 && (
+            <div style={{paddingLeft:12,marginTop:1}}>
+              <button onClick={()=>onNav('projects')}
+                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'none',cursor:'pointer',
+                  backgroundColor:'transparent',color:'#374151',fontSize:12,textAlign:'left'}}>
+                + Створити перший проєкт
+              </button>
+            </div>
+          )}
+        </div>
+
+        <NavBtn label="Контент-планер" Icon={CalendarDays} active={active==='calendar'} onClick={()=>onNav('calendar')}/>
+        <NavBtn label="Аналітика" Icon={BarChart2} active={active==='analytics'} onClick={()=>onNav('analytics')}/>
+
         <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',margin:'8px 0'}}/>
         {([['Центр ідей',Lightbulb],['Навички',TrendingUp]] as [string,LucideIcon][]).map(([label,Icon])=>(
           <button key={label} disabled style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:2,border:'none',backgroundColor:'transparent',color:'#1f2937',fontSize:14,textAlign:'left',cursor:'default'}}>
@@ -1217,6 +1285,7 @@ function Sidebar({active,onNav}:{active:NavView;onNav:(v:NavView)=>void}) {
           </button>
         ))}
       </nav>
+
       <div style={{padding:'12px 8px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
         <button style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:4}}>
           <Settings size={17}/>Налаштування
@@ -1640,7 +1709,7 @@ export default function HomePage() {
   function refresh(){setProjects(getProjects())}
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden',backgroundColor:'#070d1a'}}>
-      <Sidebar active={nav} onNav={setNav}/>
+      <Sidebar active={nav} onNav={setNav} projects={projects}/>
       <main style={{flex:1,overflowY:'auto',backgroundColor:'#070d1a'}}>
         {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={setNav}/>}
         {nav==='projects'&&<ProjectsView projects={projects} onRefresh={refresh}/>}
