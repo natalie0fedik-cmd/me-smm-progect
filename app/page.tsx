@@ -903,8 +903,11 @@ function CalendarView({ projects }: { projects: Project[] }) {
               const isWeekend=idx%7>=5
               return (
                 <div key={idx} onClick={()=>openAdd(iso)}
-                  className={`min-h-[90px] border-b border-r border-slate-700/30 p-1.5 cursor-pointer transition-colors hover:bg-slate-700/20 ${isWeekend?'bg-slate-900/10':''}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1 ${isToday?'bg-indigo-600 text-white':isWeekend?'text-slate-500':'text-slate-400'}`}>{day}</div>
+                  className={`group min-h-[90px] border-b border-r border-slate-700/30 p-1.5 cursor-pointer transition-colors hover:bg-indigo-950/30 ${isWeekend?'bg-slate-900/10':''}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${isToday?'bg-indigo-600 text-white':isWeekend?'text-slate-500':'text-slate-400'}`}>{day}</div>
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 text-sm font-light select-none">+</span>
+                  </div>
                   <div className="space-y-0.5">
                     {dayEvents.slice(0,3).map(ev=>{
                       const s=evStyle(ev)
@@ -932,11 +935,13 @@ function CalendarView({ projects }: { projects: Project[] }) {
           <div className="grid border-b border-slate-700/60" style={{gridTemplateColumns:'52px repeat(7,1fr)'}}>
             <div className="border-r border-slate-700/30"/>
             {weekDays.map(d=>(
-              <div key={d.iso} className={`py-3 text-center border-r border-slate-700/30 last:border-r-0 ${d.isWeekend?'bg-slate-900/20':''}`}>
+              <div key={d.iso} onClick={()=>openAdd(d.iso)}
+                className={`group py-3 text-center border-r border-slate-700/30 last:border-r-0 cursor-pointer transition-colors hover:bg-indigo-950/30 relative ${d.isWeekend?'bg-slate-900/20':''}`}>
                 <p className="text-xs text-slate-500 font-medium">{d.label}</p>
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold mx-auto mt-0.5 ${d.isToday?'bg-indigo-600 text-white':'text-slate-300'}`}>
                   {d.day}
                 </div>
+                <span className="absolute top-1.5 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 text-sm select-none">+</span>
               </div>
             ))}
           </div>
@@ -980,7 +985,8 @@ function CalendarView({ projects }: { projects: Project[] }) {
                   })
                   return (
                     <div key={d.iso} onClick={()=>openAdd(d.iso,`${String(h).padStart(2,'0')}:00`)}
-                      className={`border-r border-slate-700/20 last:border-r-0 p-0.5 cursor-pointer hover:bg-slate-700/20 transition-colors ${d.isWeekend?'bg-slate-900/10':''}`}>
+                      className={`group relative border-r border-slate-700/20 last:border-r-0 p-0.5 cursor-pointer hover:bg-indigo-950/30 transition-colors ${d.isWeekend?'bg-slate-900/10':''}`}>
+                      {hourEvents.length===0&&<span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-slate-700 text-xs select-none pointer-events-none">+</span>}
                       {hourEvents.map(ev=>{
                         const s=evStyle(ev)
                         return (
