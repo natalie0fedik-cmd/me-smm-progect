@@ -1713,12 +1713,12 @@ const VALID_VIEWS: NavView[] = ['dashboard','projects','calendar','analytics']
 
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([])
-  const [nav, setNav] = useState<NavView>(() => {
-    if (typeof window === 'undefined') return 'dashboard'
+  const [nav, setNav] = useState<NavView>('dashboard')
+  useEffect(() => {
+    setProjects(getProjects())
     const saved = localStorage.getItem(NAV_STORAGE_KEY) as NavView | null
-    return saved && VALID_VIEWS.includes(saved) ? saved : 'dashboard'
-  })
-  useEffect(()=>{setProjects(getProjects())},[])
+    if (saved && VALID_VIEWS.includes(saved)) setNav(saved)
+  }, [])
   function refresh(){setProjects(getProjects())}
   function navigate(v: NavView) { setNav(v); localStorage.setItem(NAV_STORAGE_KEY, v) }
   return (
