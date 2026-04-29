@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2 } from 'lucide-react'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2, Check } from 'lucide-react'
 import { Project, ProjectData, CalendarEvent, CalendarEventType } from '@/types'
 import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents } from '@/lib/storage'
 
@@ -51,147 +51,262 @@ function fmtMonthLong(m: string) {
 
 function InlineKpiPanel({ project, onSave }: { project: Project; onSave: (kpis: KpiM[]) => void }) {
   const list = parseKM(project.data.kpi)
+  const quickNames = new Set(KPI_QUICK.map(k => k.name))
+  const customList = list.filter(k => !quickNames.has(k.name))
+
   function save(next: KpiM[]) { onSave(next) }
-  function add() { save([...list, { id: crypto.randomUUID(), name: '', target: '', current: '', period: '' }]) }
-  function remove(id: string) { save(list.filter(k => k.id !== id)) }
-  function upd(id: string, field: keyof KpiM, value: string) {
+
+  function toggleQuick(ex: KpiM) {
+    const idx = list.findIndex(k => k.name === ex.name)
+    if (idx >= 0) save(list.filter((_, i) => i !== idx))
+    else save([...list, { ...ex, id: crypto.randomUUID() }])
+  }
+  function updQuick(name: string, field: 'target' | 'period', value: string) {
+    save(list.map(k => k.name === name ? { ...k, [field]: value } : k))
+  }
+  function addCustom() { save([...list, { id: crypto.randomUUID(), name: '', target: '', current: '', period: '' }]) }
+  function updCustom(id: string, field: keyof KpiM, value: string) {
     save(list.map(k => k.id === id ? { ...k, [field]: value } : k))
   }
-  function addQuick(ex: KpiM) {
-    if (!list.some(k => k.name.toLowerCase() === ex.name.toLowerCase()))
-      save([...list, { ...ex, id: crypto.randomUUID() }])
-  }
+  function removeCustom(id: string) { save(list.filter(k => k.id !== id)) }
+
   return (
-    <div className="space-y-4">
-      {list.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-3">
-          <p className="text-sm text-slate-400">Оберіть типовий KPI або додайте власний:</p>
-          <div className="space-y-1.5">
-            {KPI_QUICK.map(ex => (
-              <button key={ex.name} onClick={() => addQuick(ex)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 bg-slate-800 hover:bg-indigo-500/5 border border-slate-700 hover:border-indigo-500/30 rounded-lg transition-all text-left">
-                <span className="text-sm text-slate-300 flex-1">{ex.name}</span>
-                <span className="text-xs text-indigo-400">{ex.target}</span>
-              </button>
-            ))}
-          </div>
-          <button onClick={add} className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2">
-            <Plus size={14} /> Власний KPI
-          </button>
+    <div className="space-y-5">
+      <div>
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Оберіть KPI для відстеження</p>
+        <div className="space-y-2">
+          {KPI_QUICK.map(ex => {
+            const saved = list.find(k => k.name === ex.name)
+            const isOn = !!saved
+            return (
+              <div key={ex.name}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all"
+                style={isOn
+                  ? { backgroundColor: 'rgba(99,102,241,0.08)', borderColor: 'rgba(99,102,241,0.4)' }
+                  : { backgroundColor: 'rgba(15,23,42,0.4)', borderColor: 'rgba(51,65,85,0.5)' }}>
+                <button
+                  onClick={() => toggleQuick(ex)}
+                  className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all border"
+                  style={isOn
+                    ? { backgroundColor: '#6366f1', borderColor: '#6366f1' }
+                    : { backgroundColor: 'transparent', borderColor: '#475569' }}>
+                  {isOn && <Check size={11} color="#ffffff" />}
+                </button>
+                <span
+                  className="flex-1 text-sm font-medium cursor-pointer select-none transition-colors"
+                  onClick={() => toggleQuick(ex)}
+                  style={{ color: isOn ? '#e2e8f0' : '#64748b' }}>
+                  {ex.name}
+                </span>
+                {isOn ? (
+                  <>
+                    <input
+                      type="text" value={saved!.target}
+                      onChange={e => updQuick(ex.name, 'target', e.target.value)}
+                      placeholder="Ціль" onClick={e => e.stopPropagation()}
+                      className="bg-slate-800 border border-indigo-500/30 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none text-center w-32"
+                    />
+                    <input
+                      type="text" value={saved!.period}
+                      onChange={e => updQuick(ex.name, 'period', e.target.value)}
+                      placeholder="Período" onClick={e => e.stopPropagation()}
+                      className="bg-slate-800 border border-slate-700 focus:border-slate-500 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none text-center w-28"
+                    />
+                  </>
+                ) : (
+                  <span className="text-xs text-slate-600">{ex.target}</span>
+                )}
+              </div>
+            )
+          })}
         </div>
-      )}
-      {list.length > 0 && (
-        <>
-          <div className="grid grid-cols-[1fr_120px_120px_120px_32px] gap-2 px-3 text-xs text-slate-600 font-semibold uppercase tracking-wider">
-            <span>Показник</span><span className="text-center">Ціль</span><span className="text-center">Поточне</span><span className="text-center">Період</span><span />
-          </div>
+      </div>
+
+      {customList.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Власні KPI</p>
           <div className="space-y-2">
-            {list.map(k => (
-              <div key={k.id} className="grid grid-cols-[1fr_120px_120px_120px_32px] gap-2 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-3 py-2.5">
-                <input type="text" value={k.name} onChange={e => upd(k.id, 'name', e.target.value)} placeholder="Назва метрики" className="bg-transparent text-slate-100 text-sm placeholder-slate-600 outline-none" />
-                <input type="text" value={k.target} onChange={e => upd(k.id, 'target', e.target.value)} placeholder="+500 / міс" className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none text-center" />
-                <input type="text" value={k.current} onChange={e => upd(k.id, 'current', e.target.value)} placeholder="Зараз..." className="bg-slate-800 border border-slate-700 focus:border-emerald-500/50 rounded-lg px-2 py-1.5 text-xs text-emerald-300 placeholder-slate-600 outline-none text-center" />
-                <input type="text" value={k.period} onChange={e => upd(k.id, 'period', e.target.value)} placeholder="Щомісяця" className="bg-slate-800 border border-slate-700 focus:border-slate-500 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none text-center" />
-                <button onClick={() => remove(k.id)} className="text-slate-600 hover:text-red-400 transition-colors justify-self-center"><X size={14} /></button>
+            {customList.map(k => (
+              <div key={k.id} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/60 rounded-xl px-3 py-2.5">
+                <input type="text" value={k.name} onChange={e => updCustom(k.id, 'name', e.target.value)} placeholder="Назва метрики" className="bg-transparent text-slate-100 text-sm placeholder-slate-600 outline-none flex-1 min-w-0" />
+                <input type="text" value={k.target} onChange={e => updCustom(k.id, 'target', e.target.value)} placeholder="Ціль" className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none text-center w-28" />
+                <input type="text" value={k.period} onChange={e => updCustom(k.id, 'period', e.target.value)} placeholder="Щомісяця" className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none text-center w-24" />
+                <button onClick={() => removeCustom(k.id)} className="text-slate-600 hover:text-red-400 transition-colors"><X size={14} /></button>
               </div>
             ))}
           </div>
-          <button onClick={add} className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2">
-            <Plus size={14} /> Додати метрику
-          </button>
-        </>
+        </div>
       )}
+
+      <button onClick={addCustom} className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2">
+        <Plus size={14} /> Власний KPI
+      </button>
     </div>
   )
 }
 
 // ─── Inline Monthly Reports panel ─────────────────────────────────────────────
 
+function parseDelta(fact: string, plan: string): { value: string; positive: boolean } | null {
+  const f = parseFloat(fact.replace(/[^\d.]/g, ''))
+  const p = parseFloat(plan.replace(/[^\d.]/g, ''))
+  if (isNaN(f) || isNaN(p) || p === 0) return null
+  const pct = ((f - p) / Math.abs(p)) * 100
+  return { value: `${pct >= 0 ? '+' : ''}${Math.round(pct)}%`, positive: pct >= 0 }
+}
+
 function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (reports: MonthlyRep[]) => void }) {
   const kpis = parseKM(project.data.kpi)
   const reports = parseMR(project.data.monthlyReports)
+
+  const now = new Date()
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [draftMonth, setDraftMonth] = useState(thisMonth)
+  const [draftActuals, setDraftActuals] = useState<Record<string, string>>({})
+  const [draftNotes, setDraftNotes] = useState('')
+
   function save(next: MonthlyRep[]) { onSave(next) }
-  function addMonth() {
-    const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    if (reports.some(r => r.month === month)) return
-    save([{ id: crypto.randomUUID(), month, actuals: {}, notes: '' }, ...reports])
-  }
-  function updateActual(id: string, kpiName: string, value: string) {
-    save(reports.map(r => r.id === id ? { ...r, actuals: { ...r.actuals, [kpiName]: value } } : r))
-  }
-  function updateNotes(id: string, notes: string) {
-    save(reports.map(r => r.id === id ? { ...r, notes } : r))
-  }
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
+
+  function loadMonth(month: string) {
+    const r = reports.find(rep => rep.month === month)
+    setDraftMonth(month)
+    setDraftActuals(r ? { ...r.actuals } : {})
+    setDraftNotes(r ? r.notes : '')
+  }
+
+  function saveReport() {
+    const existing = reports.find(r => r.month === draftMonth)
+    if (existing) {
+      save(reports.map(r => r.month === draftMonth ? { ...r, actuals: draftActuals, notes: draftNotes } : r))
+    } else {
+      save([{ id: crypto.randomUUID(), month: draftMonth, actuals: draftActuals, notes: draftNotes }, ...reports])
+    }
+    // After save, reset form and advance to next empty month
+    const [y, m] = draftMonth.split('-').map(Number)
+    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+    setDraftMonth(next)
+    setDraftActuals({})
+    setDraftNotes('')
+  }
 
   if (kpis.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center space-y-2">
         <p className="text-2xl">📊</p>
         <p className="text-sm font-medium text-slate-300">Спочатку заповніть KPI (план)</p>
-        <p className="text-xs text-slate-500">Перейдіть на вкладку «KPI (план)» і додайте показники</p>
+        <p className="text-xs text-slate-500">Перейдіть на вкладку «KPI (план)» і виберіть показники</p>
       </div>
     )
   }
+
+  const isEdit = reports.some(r => r.month === draftMonth)
+  const anyFact = kpis.some(k => (draftActuals[k.name] ?? '').trim())
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={addMonth} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
-          <Plus size={14} /> Додати місяць
-        </button>
-        {reports.length > 0 && (
-          <button onClick={() => exportCsvA(kpis, [...reports].reverse(), project.name)} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
-            ⬇ CSV
-          </button>
-        )}
-      </div>
-      {reports.length === 0 && (
-        <p className="text-xs text-slate-600 text-center py-4">Натисніть «Додати місяць» щоб почати вносити фактичні дані</p>
-      )}
-      {reports.map(report => (
-        <div key={report.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/60">
-            <span className="text-sm font-bold text-white">{fmtMonthLong(report.month)}</span>
-            <input
-              type="month" value={report.month}
-              onChange={e => { if (!reports.some(r => r.id !== report.id && r.month === e.target.value)) save(reports.map(r => r.id === report.id ? { ...r, month: e.target.value } : r)) }}
-              className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-xs text-slate-400 outline-none ml-1"
-            />
-            <button onClick={() => removeReport(report.id)} className="ml-auto text-slate-600 hover:text-red-400 transition-colors"><X size={14} /></button>
-          </div>
-          <div className="p-4 space-y-3">
-            <div className="grid grid-cols-[1fr_120px_120px] gap-x-3 gap-y-2">
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Показник</div>
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">План</div>
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Факт</div>
-              {kpis.map(kpi => {
-                const fact = report.actuals[kpi.name] ?? ''
-                return (
-                  <>
-                    <div key={`${kpi.id}-n`} className="text-sm text-slate-300 flex items-center">{kpi.name}</div>
-                    <div key={`${kpi.id}-p`} className="text-sm text-slate-500 flex items-center justify-center">{kpi.target}</div>
-                    <input
-                      key={`${kpi.id}-f`}
-                      type="text" value={fact}
-                      onChange={e => updateActual(report.id, kpi.name, e.target.value)}
-                      placeholder="Введіть факт"
-                      className="bg-slate-800 border rounded-lg px-2 py-1.5 text-xs text-center outline-none transition-colors placeholder-slate-600"
-                      style={{ borderColor: fact ? 'rgba(16,185,129,0.5)' : '#334155', color: fact ? '#6ee7b7' : '#94a3b8' }}
-                    />
-                  </>
-                )
-              })}
-            </div>
-            <textarea
-              value={report.notes} onChange={e => updateNotes(report.id, e.target.value)}
-              placeholder="Нотатки за місяць..."
-              rows={2}
-              className="w-full bg-slate-800/50 border border-slate-700 focus:border-slate-500 rounded-lg px-3 py-2 text-xs text-slate-400 placeholder-slate-600 outline-none resize-none"
-            />
-          </div>
+    <div className="space-y-6">
+      {/* Form */}
+      <div className="bg-slate-900/50 border border-slate-700/60 rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 bg-slate-800/60 border-b border-slate-700/60 flex-wrap">
+          <span className="text-sm font-semibold text-white">{isEdit ? 'Редагувати звіт' : 'Новий звіт'}</span>
+          <input
+            type="month" value={draftMonth}
+            onChange={e => loadMonth(e.target.value)}
+            className="bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors"
+          />
+          {isEdit && <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-lg">Звіт існує — оновлюється</span>}
         </div>
-      ))}
+
+        <div className="p-5 space-y-4">
+          {/* KPI rows */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_130px_130px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
+              <span>Показник</span>
+              <span className="text-center">План</span>
+              <span className="text-center">Факт</span>
+              <span className="text-center">Δ</span>
+            </div>
+            {kpis.map(kpi => {
+              const fact = draftActuals[kpi.name] ?? ''
+              const delta = parseDelta(fact, kpi.target)
+              return (
+                <div key={kpi.id} className="grid grid-cols-[1fr_130px_130px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
+                  style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
+                  <span className="text-sm text-slate-300">{kpi.name}</span>
+                  <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
+                  <input
+                    type="text" value={fact}
+                    onChange={e => setDraftActuals(a => ({ ...a, [kpi.name]: e.target.value }))}
+                    placeholder="Вкажіть факт"
+                    className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-600 bg-slate-800"
+                    style={{ borderColor: fact ? 'rgba(16,185,129,0.5)' : '#334155', color: fact ? '#6ee7b7' : '#94a3b8' }}
+                  />
+                  <span className="text-sm text-center font-semibold"
+                    style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
+                    {delta ? delta.value : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          <textarea
+            value={draftNotes} onChange={e => setDraftNotes(e.target.value)}
+            placeholder="Нотатки за місяць: що спрацювало, що ні..."
+            rows={2}
+            className="w-full bg-slate-800/50 border border-slate-700 focus:border-slate-500 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 outline-none resize-none transition-colors"
+          />
+
+          <button
+            onClick={saveReport}
+            disabled={!anyFact}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: anyFact ? '#4f46e5' : '#1e293b', color: '#ffffff' }}
+          >
+            {isEdit ? '✓ Оновити звіт' : '✓ Зберегти звіт'}
+          </button>
+        </div>
+      </div>
+
+      {/* History */}
+      {reports.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Попередні звіти</p>
+            <button onClick={() => exportCsvA(kpis, [...reports].reverse(), project.name)}
+              className="text-xs text-slate-500 hover:text-white transition-colors">⬇ CSV</button>
+          </div>
+          {[...reports].sort((a, b) => b.month.localeCompare(a.month)).map(report => (
+            <div key={report.id} className="bg-slate-900/40 border border-slate-700/50 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/40">
+                <span className="text-sm font-bold text-slate-300">{fmtMonthLong(report.month)}</span>
+                <span className="text-xs text-slate-600 flex-1">
+                  {kpis.filter(k => report.actuals[k.name]?.trim()).length}/{kpis.length} заповнено
+                </span>
+                <button onClick={() => loadMonth(report.month)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Редагувати</button>
+                <button onClick={() => removeReport(report.id)} className="text-slate-600 hover:text-red-400 transition-colors ml-2"><X size={13} /></button>
+              </div>
+              <div className="px-4 py-3 space-y-1.5">
+                {kpis.map(kpi => {
+                  const fact = report.actuals[kpi.name] ?? ''
+                  const delta = parseDelta(fact, kpi.target)
+                  return (
+                    <div key={kpi.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500 flex-1 min-w-0 truncate">{kpi.name}</span>
+                      <span className="text-slate-600 text-right whitespace-nowrap">{kpi.target}</span>
+                      <span className="text-slate-700 mx-1">→</span>
+                      <span className="font-medium w-20 text-right whitespace-nowrap" style={{ color: fact ? '#6ee7b7' : '#475569' }}>{fact || '—'}</span>
+                      {delta && <span className="w-10 text-right font-semibold" style={{ color: delta.positive ? '#6ee7b7' : '#f87171' }}>{delta.value}</span>}
+                    </div>
+                  )
+                })}
+                {report.notes && <p className="text-xs text-slate-600 pt-1.5 border-t border-slate-700/40 mt-1">{report.notes}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -287,10 +402,10 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
                 </div>
               </div>
               {section === 'kpi' && (
-                <InlineKpiPanel project={project} onSave={kpis => saveKpi(project, kpis)} />
+                <InlineKpiPanel key={project.id} project={project} onSave={kpis => saveKpi(project, kpis)} />
               )}
               {section === 'reports' && (
-                <InlineReportsPanel project={project} onSave={reps => saveReps(project, reps)} />
+                <InlineReportsPanel key={project.id} project={project} onSave={reps => saveReps(project, reps)} />
               )}
             </div>
           )}
