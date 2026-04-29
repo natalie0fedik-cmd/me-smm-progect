@@ -338,20 +338,22 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Проєктів з KPI',    value: withKpi,      sub: `з ${projects.length} всього` },
-          { label: 'Місяців залоговано', value: totalMonths,  sub: 'звітів у всіх проєктах' },
-          { label: 'KPI відстежується', value: totalKpi,     sub: 'показників сумарно' },
-        ].map(({ label, value, sub }) => (
-          <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
-            <p className="text-3xl font-bold text-white mb-1">{value}</p>
-            <p className="text-sm font-medium text-slate-300">{label}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
-          </div>
-        ))}
-      </div>
+      {/* Summary — shown only once there's real data */}
+      {(totalKpi > 0 || totalMonths > 0) && (
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'Проєктів з KPI',    value: withKpi,      sub: `з ${projects.length} всього` },
+            { label: 'Місяців залоговано', value: totalMonths,  sub: 'звітів у всіх проєктах' },
+            { label: 'KPI відстежується', value: totalKpi,     sub: 'показників сумарно' },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
+              <p className="text-3xl font-bold text-white mb-1">{value}</p>
+              <p className="text-sm font-medium text-slate-300">{label}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Two-column layout */}
       <div className="flex gap-5 items-start">
