@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2, Check } from 'lucide-react'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, type LucideIcon } from 'lucide-react'
 import { Project, ProjectData, CalendarEvent, CalendarEventType } from '@/types'
 import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents } from '@/lib/storage'
 
@@ -714,236 +714,438 @@ function CalendarView({ projects }: { projects: Project[] }) {
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 
-const EMOJI_OPTIONS = ['🚀', '💼', '🎯', '✨', '🌿', '🔥', '💡', '🎨', '📱', '🛍️', '🏋️', '🍕', '🌍', '💎', '🎵']
 
-export default function HomePage() {
+// ─── Platform + layout config ─────────────────────────────────────────────────
+
+const PLATFORM_OPTIONS = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Telegram','Twitter/X','Pinterest','Threads']
+const PLATFORM_COLORS: Record<string, string> = {
+  Instagram:'#e1306c', Facebook:'#1877f2', TikTok:'#69c9d0', LinkedIn:'#0a66c2',
+  YouTube:'#ff0000', Telegram:'#229ed9', 'Twitter/X':'#1da1f2', Pinterest:'#e60023', Threads:'#aaaaaa',
+}
+function getProjectColor(id: string): string {
+  const p=['#1d4ed8','#7c3aed','#059669','#dc2626','#d97706','#0891b2','#db2777','#2563eb']
+  return p[id.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%p.length]
+}
+function projectInitials(name: string): string {
+  return name.split(' ').map(w=>w[0]).filter(Boolean).slice(0,2).join('').toUpperCase()||'?'
+}
+
+type NavView = 'dashboard'|'projects'|'calendar'|'analytics'
+
+function NavBtn({label,Icon,active,onClick}:{label:string;Icon:LucideIcon;active:boolean;onClick:()=>void}) {
+  const [hov,setHov]=useState(false)
+  return (
+    <button onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:2,border:'none',cursor:'pointer',
+        backgroundColor:active?'rgba(37,99,235,0.18)':hov?'rgba(255,255,255,0.04)':'transparent',
+        color:active?'#60a5fa':'#4b5563',fontWeight:active?600:400,fontSize:14,textAlign:'left',transition:'all 0.12s'}}>
+      <Icon size={17}/><span>{label}</span>
+      {active&&<span style={{marginLeft:'auto',width:6,height:6,borderRadius:3,backgroundColor:'#3b82f6',flexShrink:0}}/>}
+    </button>
+  )
+}
+
+function Sidebar({active,onNav}:{active:NavView;onNav:(v:NavView)=>void}) {
+  const items:[NavView,string,LucideIcon][]=[
+    ['dashboard','Дашборд',LayoutDashboard],
+    ['projects','Проєкти',FolderOpen],
+    ['calendar','Контент-планер',CalendarDays],
+    ['analytics','Аналітика',BarChart2],
+  ]
+  return (
+    <aside style={{width:242,flexShrink:0,backgroundColor:'#04090f',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,borderRight:'1px solid rgba(255,255,255,0.05)'}}>
+      <div style={{padding:'20px 16px 16px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Zap size={18} color="#fff"/>
+          </div>
+          <div>
+            <p style={{color:'#e2e8f0',fontWeight:700,fontSize:15,lineHeight:1.2}}>SMMFlow</p>
+            <p style={{color:'#374151',fontSize:11}}>Операційна система</p>
+          </div>
+        </div>
+      </div>
+      <nav style={{flex:1,padding:'8px',overflowY:'auto'}}>
+        {items.map(([id,label,Icon])=>(
+          <NavBtn key={id} label={label} Icon={Icon} active={active===id} onClick={()=>onNav(id)}/>
+        ))}
+        <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',margin:'8px 0'}}/>
+        {([['Центр ідей',Lightbulb],['Навички',TrendingUp]] as [string,LucideIcon][]).map(([label,Icon])=>(
+          <button key={label} disabled style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:2,border:'none',backgroundColor:'transparent',color:'#1f2937',fontSize:14,textAlign:'left',cursor:'default'}}>
+            <Icon size={17}/><span>{label}</span>
+            <span style={{marginLeft:'auto',fontSize:10,color:'#1f2937',border:'1px solid #1f2937',padding:'1px 5px',borderRadius:4}}>скоро</span>
+          </button>
+        ))}
+      </nav>
+      <div style={{padding:'12px 8px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+        <button style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:4}}>
+          <Settings size={17}/>Налаштування
+        </button>
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
+          <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>НФ</div>
+          <div>
+            <p style={{color:'#d1d5db',fontSize:13,fontWeight:600}}>Наталія Федік</p>
+            <p style={{color:'#374151',fontSize:11}}>SMM-спеціаліст</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+// ─── DashboardView ────────────────────────────────────────────────────────────
+
+function DashboardView({projects,onNavigate}:{projects:Project[];onNavigate:(v:NavView)=>void}) {
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0,10)
+  const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1)
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6)
+  const weekStartStr = weekStart.toISOString().slice(0,10)
+  const weekEndStr = weekEnd.toISOString().slice(0,10)
+
+  const events = getCalendarEvents().filter(e=>e.date>=weekStartStr && e.date<=weekEndStr)
+
+  const DAY_NAMES=['Пн','Вт','Ср','Чт','Пт','Сб','Нд']
+  const weekDays: {label:string;date:string}[] = Array.from({length:7},(_,i)=>{
+    const d=new Date(weekStart); d.setDate(weekStart.getDate()+i)
+    return {label:DAY_NAMES[i],date:d.toISOString().slice(0,10)}
+  })
+
+  const EVENT_COLORS: Record<string,string> = {meeting:'#6366f1',planning:'#0891b2',shoot:'#d97706',publish:'#059669',other:'#6b7280'}
+  const EVENT_UA: Record<string,string> = {meeting:'Зустріч',planning:'Планування',shoot:'Зйомка',publish:'Публікація',other:'Інше'}
+
+  const totalProjects = projects.length
+  const activeProjects = projects.filter(p=>getProgress(p.data)>0).length
+
+  const hours = now.getHours()
+  const realGreeting = hours<12?'Доброго ранку':hours<17?'Добрий день':'Добрий вечір'
+
+  return (
+    <div style={{padding:'36px 44px',maxWidth:1200}}>
+      {/* Header */}
+      <div style={{marginBottom:32}}>
+        <h1 style={{color:'#e2e8f0',fontSize:26,fontWeight:700,marginBottom:4}}>{realGreeting}, Наталіє 👋</h1>
+        <p style={{color:'#4b5563',fontSize:14}}>{now.toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:32}}>
+        {[
+          {label:'Активних проєктів',value:activeProjects,sub:`з ${totalProjects} загалом`,color:'#3b82f6'},
+          {label:'Подій цього тижня',value:events.length,sub:'в контент-планері',color:'#8b5cf6'},
+          {label:'Публікацій',value:events.filter(e=>e.type==='publish').length,sub:'цього тижня',color:'#10b981'},
+          {label:'Зустрічей',value:events.filter(e=>e.type==='meeting').length,sub:'цього тижня',color:'#f59e0b'},
+        ].map(s=>(
+          <div key={s.label} style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:'20px 22px'}}>
+            <p style={{color:'#4b5563',fontSize:12,marginBottom:8}}>{s.label}</p>
+            <p style={{fontSize:32,fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</p>
+            <p style={{color:'#374151',fontSize:12,marginTop:6}}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+        {/* Projects list */}
+        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:22}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
+            <h2 style={{color:'#e2e8f0',fontSize:15,fontWeight:600}}>Проєкти</h2>
+            <button onClick={()=>onNavigate('projects')} style={{color:'#3b82f6',fontSize:12,background:'none',border:'none',cursor:'pointer'}}>Всі проєкти →</button>
+          </div>
+          {projects.length===0?(
+            <p style={{color:'#374151',fontSize:13,textAlign:'center',padding:'24px 0'}}>Ще немає проєктів</p>
+          ):(
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {projects.slice(0,5).map(p=>{
+                const prog=getProgress(p.data)
+                const color=getProjectColor(p.id)
+                return (
+                  <div key={p.id} style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:36,height:36,borderRadius:10,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:13,fontWeight:700,flexShrink:0}}>
+                      {projectInitials(p.name)}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                        <p style={{color:'#d1d5db',fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
+                        <span style={{color:'#4b5563',fontSize:11,flexShrink:0,marginLeft:8}}>{prog}%</span>
+                      </div>
+                      <div style={{height:4,backgroundColor:'#0f1e30',borderRadius:2}}>
+                        <div style={{height:4,borderRadius:2,backgroundColor:color,width:`${prog}%`,transition:'width 0.3s'}}/>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Week calendar */}
+        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:22}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
+            <h2 style={{color:'#e2e8f0',fontSize:15,fontWeight:600}}>Контент цього тижня</h2>
+            <button onClick={()=>onNavigate('calendar')} style={{color:'#3b82f6',fontSize:12,background:'none',border:'none',cursor:'pointer'}}>Планер →</button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:12}}>
+            {weekDays.map(d=>(
+              <div key={d.date} style={{textAlign:'center'}}>
+                <p style={{color:'#374151',fontSize:10,marginBottom:4}}>{d.label}</p>
+                <div style={{width:28,height:28,borderRadius:8,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',
+                  backgroundColor:d.date===todayStr?'#1d4ed8':'transparent',
+                  border:d.date===todayStr?'none':'1px solid rgba(255,255,255,0.04)'}}>
+                  <span style={{color:d.date===todayStr?'#fff':'#4b5563',fontSize:11}}>{d.date.slice(8)}</span>
+                </div>
+                <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:2}}>
+                  {events.filter(e=>e.date===d.date).slice(0,3).map(e=>(
+                    <div key={e.id} style={{height:4,borderRadius:2,backgroundColor:EVENT_COLORS[e.type]}}/>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {events.length===0?(
+            <p style={{color:'#374151',fontSize:12,textAlign:'center',paddingTop:8}}>Немає подій цього тижня</p>
+          ):(
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {events.slice(0,4).map(e=>(
+                <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',backgroundColor:'#0f1e30',borderRadius:8}}>
+                  <div style={{width:8,height:8,borderRadius:4,backgroundColor:EVENT_COLORS[e.type],flexShrink:0}}/>
+                  <p style={{color:'#d1d5db',fontSize:12,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.title}</p>
+                  <span style={{color:'#374151',fontSize:11,flexShrink:0}}>{EVENT_UA[e.type]}</span>
+                </div>
+              ))}
+              {events.length>4&&<p style={{color:'#374151',fontSize:11,textAlign:'center'}}>+{events.length-4} подій</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── ProjectsView ─────────────────────────────────────────────────────────────
+
+const EMOJI_OPTIONS = ['🚀','💼','🎯','✨','🌿','🔥','💡','🎨','📱','🛍️','🏋️','🍕','🌍','💎','🎵']
+
+function ProjectsView({projects,onRefresh}:{projects:Project[];onRefresh:()=>void}) {
   const router = useRouter()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [activeTab, setActiveTab] = useState<'projects' | 'calendar' | 'analytics'>('projects')
-  const [showModal, setShowModal] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [newEmoji, setNewEmoji] = useState('🚀')
   const [newDesc, setNewDesc] = useState('')
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-
-  useEffect(() => { setProjects(getProjects()) }, [])
+  const [newPlatforms, setNewPlatforms] = useState<string[]>([])
+  const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
 
   function handleCreate() {
     if (!newName.trim()) return
-    const project = createProject(newName.trim(), newEmoji, newDesc.trim())
-    setProjects(getProjects())
-    setShowModal(false)
-    setNewName('')
-    setNewDesc('')
-    setNewEmoji('🚀')
-    router.push(`/projects/${project.id}`)
+    const p = createProject(newName.trim(), newEmoji, newDesc.trim(), newPlatforms)
+    onRefresh()
+    setShowCreate(false)
+    setNewName(''); setNewDesc(''); setNewEmoji('🚀'); setNewPlatforms([])
+    router.push(`/projects/${p.id}`)
   }
 
-  function handleDelete(id: string) {
-    deleteProject(id)
-    setProjects(getProjects())
-    setDeleteConfirm(null)
+  function handleDelete(id:string) {
+    deleteProject(id); onRefresh(); setDeleteConfirm(null)
   }
 
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' })
+  function togglePlatform(pl:string) {
+    setNewPlatforms(prev=>prev.includes(pl)?prev.filter(x=>x!==pl):[...prev,pl])
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Header */}
-      <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-6">
-          <div className="flex items-center gap-3 mr-2">
-            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">S</div>
-            <span className="text-white font-semibold text-lg">SMM Стратег</span>
-          </div>
+    <div style={{padding:'36px 44px',maxWidth:1100}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:28}}>
+        <div>
+          <h1 style={{color:'#e2e8f0',fontSize:24,fontWeight:700}}>Проєкти</h1>
+          <p style={{color:'#4b5563',fontSize:13,marginTop:2}}>{projects.length} проєктів</p>
+        </div>
+        <button onClick={()=>setShowCreate(true)}
+          style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer'}}>
+          <Plus size={16}/>Новий проєкт
+        </button>
+      </div>
 
-          {/* Nav tabs */}
-          <nav className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 border border-slate-700/50">
-            <button
-              onClick={() => setActiveTab('projects')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'projects' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              Проєкти
-            </button>
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${activeTab === 'calendar' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              <Calendar size={14} /> Календар
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${activeTab === 'analytics' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              <BarChart2 size={14} /> Аналітика
-            </button>
-          </nav>
-
-          <button
-            onClick={() => setShowModal(true)}
-            className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={16} />
-            Новий проєкт
+      {projects.length===0?(
+        <div style={{textAlign:'center',padding:'80px 20px'}}>
+          <p style={{color:'#374151',fontSize:16,marginBottom:12}}>Поки що немає проєктів</p>
+          <button onClick={()=>setShowCreate(true)}
+            style={{display:'inline-flex',alignItems:'center',gap:7,padding:'10px 20px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
+            <Plus size={15}/>Створити перший
           </button>
         </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-10">
-
-        {/* ── Projects tab ── */}
-        {activeTab === 'projects' && (
-          <>
-            <div className="mb-10">
-              <h1 className="text-3xl font-bold text-white mb-2">Мої проєкти</h1>
-              <p className="text-slate-400">Управляйте SMM-стратегіями для всіх ваших клієнтів в одному місці</p>
-            </div>
-
-            {projects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
-                  <FolderOpen size={28} className="text-slate-500" />
-                </div>
-                <h2 className="text-xl font-semibold text-white mb-2">Ще немає проєктів</h2>
-                <p className="text-slate-400 mb-6 max-w-sm">Створіть перший проєкт і почніть розробляти SMM-стратегію для вашого клієнта</p>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                >
-                  <Plus size={18} /> Створити проєкт
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {projects.map((project) => {
-                  const progress = getProgress(project.data)
-                  return (
-                    <div
-                      key={project.id}
-                      className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5 hover:border-indigo-500/50 transition-all hover:shadow-lg hover:shadow-indigo-500/10 group cursor-pointer"
-                      onClick={() => router.push(`/projects/${project.id}`)}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="text-3xl">{project.emoji}</div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(project.id) }}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-all"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                      <h3 className="text-white font-semibold text-lg mb-1 truncate">{project.name}</h3>
-                      {project.description && <p className="text-slate-400 text-sm mb-4 line-clamp-2">{project.description}</p>}
-                      <div className="mt-4 space-y-3">
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp size={11} /> Заповненість стратегії</span>
-                            <span className="text-xs font-semibold text-indigo-400">{progress}%</span>
-                          </div>
-                          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-500">
-                          <Calendar size={11} /> Оновлено {formatDate(project.updatedAt)}
-                        </div>
-                      </div>
+      ):(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:18}}>
+          {projects.map(p=>{
+            const prog=getProgress(p.data)
+            const color=getProjectColor(p.id)
+            return (
+              <div key={p.id} onClick={()=>router.push(`/projects/${p.id}`)}
+                style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:22,cursor:'pointer',transition:'border-color 0.15s,transform 0.1s'}}
+                onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(59,130,246,0.3)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(255,255,255,0.06)';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:44,height:44,borderRadius:12,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:15,fontWeight:700,flexShrink:0}}>
+                      {projectInitials(p.name)}
                     </div>
-                  )
-                })}
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="border-2 border-dashed border-slate-700 rounded-2xl p-5 hover:border-indigo-500/50 hover:bg-slate-800/30 transition-all flex flex-col items-center justify-center gap-3 min-h-[180px] group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 group-hover:bg-indigo-500/20 flex items-center justify-center transition-colors">
-                    <Plus size={20} className="text-slate-500 group-hover:text-indigo-400" />
+                    <div>
+                      <p style={{color:'#e2e8f0',fontSize:14,fontWeight:600,lineHeight:1.3}}>{p.name}</p>
+                      {p.description&&<p style={{color:'#4b5563',fontSize:12,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:160}}>{p.description}</p>}
+                    </div>
                   </div>
-                  <span className="text-slate-500 group-hover:text-slate-300 text-sm font-medium transition-colors">Новий проєкт</span>
-                </button>
+                  <button onClick={e=>{e.stopPropagation();setDeleteConfirm(p.id)}}
+                    style={{background:'none',border:'none',color:'#374151',cursor:'pointer',padding:4,borderRadius:6,flexShrink:0}}
+                    onMouseEnter={e=>(e.currentTarget.style.color='#ef4444')}
+                    onMouseLeave={e=>(e.currentTarget.style.color='#374151')}>
+                    <Trash2 size={14}/>
+                  </button>
+                </div>
+
+                {p.platforms.length>0&&(
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:12}}>
+                    {p.platforms.map(pl=>(
+                      <span key={pl} style={{fontSize:10,padding:'2px 8px',borderRadius:20,fontWeight:500,
+                        backgroundColor:PLATFORM_COLORS[pl]?PLATFORM_COLORS[pl]+'22':'rgba(255,255,255,0.07)',
+                        color:PLATFORM_COLORS[pl]||'#9ca3af',border:`1px solid ${PLATFORM_COLORS[pl]||'#374151'}44`}}>
+                        {pl}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                    <span style={{color:'#4b5563',fontSize:11}}>Заповнено</span>
+                    <span style={{color:'#6b7280',fontSize:11,fontWeight:500}}>{prog}%</span>
+                  </div>
+                  <div style={{height:5,backgroundColor:'#0f1e30',borderRadius:3}}>
+                    <div style={{height:5,borderRadius:3,backgroundColor:color,width:`${prog}%`,transition:'width 0.4s'}}/>
+                  </div>
+                </div>
+
+                <div style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <span style={{color:'#374151',fontSize:11}}>{new Date(p.updatedAt).toLocaleDateString('uk-UA')}</span>
+                  <span style={{color:prog===100?'#10b981':prog>50?'#f59e0b':'#6b7280',fontSize:11,fontWeight:500}}>
+                    {prog===100?'Готово':prog>50?'В роботі':'Початок'}
+                  </span>
+                </div>
               </div>
-            )}
-          </>
-        )}
+            )
+          })}
+        </div>
+      )}
 
-        {/* ── Calendar tab ── */}
-        {activeTab === 'calendar' && (
-          <>
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">Календар</h1>
-              <p className="text-slate-400">Плануйте наради, зйомки, контент і публікації</p>
+      {/* Create modal */}
+      {showCreate&&(
+        <div style={{position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}}>
+          <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.08)',borderRadius:18,padding:28,width:480,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}}>
+              <h3 style={{color:'#e2e8f0',fontSize:17,fontWeight:600}}>Новий проєкт</h3>
+              <button onClick={()=>setShowCreate(false)} style={{background:'none',border:'none',color:'#4b5563',cursor:'pointer'}}><X size={18}/></button>
             </div>
-            <CalendarView projects={projects} />
-          </>
-        )}
 
-        {/* ── Analytics tab ── */}
-        {activeTab === 'analytics' && (
-          <>
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">Аналітика</h1>
-              <p className="text-slate-400">Зведені звіти по всіх проєктах: план vs факт</p>
+            <div style={{marginBottom:14}}>
+              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Назва</p>
+              <input value={newName} onChange={e=>setNewName(e.target.value)}
+                placeholder="Назва проєкту"
+                style={{width:'100%',backgroundColor:'#0f1e30',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'10px 14px',color:'#e2e8f0',fontSize:14,outline:'none'}}/>
             </div>
-            <AnalyticsView projects={projects} onUpdate={() => setProjects(getProjects())} />
-          </>
-        )}
-      </main>
 
-      {/* Create Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h2 className="text-white text-xl font-semibold mb-5">Новий проєкт</h2>
-            <div className="mb-4">
-              <label className="text-slate-400 text-sm mb-2 block">Іконка</label>
-              <div className="flex flex-wrap gap-2">
-                {EMOJI_OPTIONS.map(em => (
-                  <button key={em} onClick={() => setNewEmoji(em)}
-                    className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${newEmoji === em ? 'bg-indigo-500/30 ring-2 ring-indigo-500' : 'bg-slate-700 hover:bg-slate-600'}`}>
+            <div style={{marginBottom:14}}>
+              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Опис</p>
+              <textarea value={newDesc} onChange={e=>setNewDesc(e.target.value)}
+                placeholder="Короткий опис"
+                rows={2}
+                style={{width:'100%',backgroundColor:'#0f1e30',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'10px 14px',color:'#e2e8f0',fontSize:14,outline:'none',resize:'vertical',minHeight:60}}/>
+            </div>
+
+            <div style={{marginBottom:14}}>
+              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Емодзі</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {EMOJI_OPTIONS.map(em=>(
+                  <button key={em} onClick={()=>setNewEmoji(em)}
+                    style={{width:34,height:34,borderRadius:8,fontSize:16,border:'none',cursor:'pointer',
+                      backgroundColor:newEmoji===em?'rgba(37,99,235,0.3)':'rgba(255,255,255,0.04)',
+                      outline:newEmoji===em?'2px solid #3b82f6':'none'}}>
                     {em}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="mb-4">
-              <label className="text-slate-400 text-sm mb-1.5 block">Назва проєкту *</label>
-              <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                placeholder="Наприклад: Кав'ярня «Аромат»"
-                className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 transition-colors" autoFocus />
+
+            <div style={{marginBottom:22}}>
+              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Платформи</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {PLATFORM_OPTIONS.map(pl=>{
+                  const sel=newPlatforms.includes(pl)
+                  const c=PLATFORM_COLORS[pl]||'#6b7280'
+                  return (
+                    <button key={pl} onClick={()=>togglePlatform(pl)}
+                      style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:500,cursor:'pointer',border:'none',transition:'all 0.12s',
+                        backgroundColor:sel?c+'33':'rgba(255,255,255,0.04)',
+                        color:sel?c:'#4b5563',
+                        outline:sel?`1px solid ${c}55`:'none'}}>
+                      {pl}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <div className="mb-6">
-              <label className="text-slate-400 text-sm mb-1.5 block">Опис (необов'язково)</label>
-              <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
-                placeholder="Стисло про клієнта або проєкт"
-                className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 transition-colors" />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowModal(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium transition-colors">Скасувати</button>
+
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setShowCreate(false)}
+                style={{flex:1,padding:'10px',backgroundColor:'rgba(255,255,255,0.04)',color:'#9ca3af',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
+                Скасувати
+              </button>
               <button onClick={handleCreate} disabled={!newName.trim()}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg font-medium transition-colors">Створити</button>
+                style={{flex:1,padding:'10px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer',opacity:newName.trim()?1:0.4}}>
+                Створити
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Delete confirm */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="text-4xl mb-4 text-center">⚠️</div>
-            <h2 className="text-white text-lg font-semibold text-center mb-2">Видалити проєкт?</h2>
-            <p className="text-slate-400 text-sm text-center mb-6">Всі дані цього проєкту будуть видалені безповоротно</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium transition-colors">Скасувати</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-lg font-medium transition-colors">Видалити</button>
+      {deleteConfirm&&(()=>{const p=projects.find(x=>x.id===deleteConfirm);return p?(
+        <div style={{position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}}>
+          <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.08)',borderRadius:18,padding:28,width:360}}>
+            <h3 style={{color:'#e2e8f0',fontSize:16,fontWeight:600,marginBottom:8}}>Видалити проєкт?</h3>
+            <p style={{color:'#6b7280',fontSize:13,marginBottom:22}}>«{p.name}» буде видалено назавжди.</p>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setDeleteConfirm(null)}
+                style={{flex:1,padding:'10px',backgroundColor:'rgba(255,255,255,0.04)',color:'#9ca3af',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
+                Скасувати
+              </button>
+              <button onClick={()=>handleDelete(deleteConfirm)}
+                style={{flex:1,padding:'10px',backgroundColor:'#dc2626',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer'}}>
+                Видалити
+              </button>
             </div>
           </div>
         </div>
-      )}
+      ):null})()}
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function HomePage() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [nav, setNav] = useState<NavView>('dashboard')
+  useEffect(()=>{setProjects(getProjects())},[])
+  function refresh(){setProjects(getProjects())}
+  return (
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',backgroundColor:'#070d1a'}}>
+      <Sidebar active={nav} onNav={setNav}/>
+      <main style={{flex:1,overflowY:'auto',backgroundColor:'#070d1a'}}>
+        {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={setNav}/>}
+        {nav==='projects'&&<ProjectsView projects={projects} onRefresh={refresh}/>}
+        {nav==='calendar'&&<div style={{padding:'36px 44px'}}><CalendarView projects={projects}/></div>}
+        {nav==='analytics'&&<div style={{padding:'36px 44px'}}><AnalyticsView projects={projects} onUpdate={refresh}/></div>}
+      </main>
     </div>
   )
 }

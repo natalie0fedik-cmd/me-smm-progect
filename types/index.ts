@@ -70,6 +70,7 @@ export interface Project {
   name: string
   emoji: string
   description: string
+  platforms: string[]
   createdAt: string
   updatedAt: string
   data: ProjectData

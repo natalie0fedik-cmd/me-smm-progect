@@ -20,6 +20,7 @@ export function saveCalendarEvents(events: CalendarEvent[]): void {
 function migrateProject(p: Project): Project {
   return {
     ...p,
+    platforms: p.platforms ?? [],
     data: { ...EMPTY_PROJECT_DATA, ...p.data },
   }
 }
@@ -52,12 +53,13 @@ export function saveProject(project: Project): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
 }
 
-export function createProject(name: string, emoji: string, description: string): Project {
+export function createProject(name: string, emoji: string, description: string, platforms: string[] = []): Project {
   const project: Project = {
     id: crypto.randomUUID(),
     name,
     emoji,
     description,
+    platforms,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     data: { ...EMPTY_PROJECT_DATA },
