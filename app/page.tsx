@@ -314,8 +314,12 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
 // ─── Analytics view ───────────────────────────────────────────────────────────
 
 function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: () => void }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => projects[0]?.id ?? null)
   const [section, setSection] = useState<'kpi' | 'reports'>('kpi')
+
+  useEffect(() => {
+    setSelectedId(id => id && projects.find(p => p.id === id) ? id : (projects[0]?.id ?? null))
+  }, [projects])
 
   const project = projects.find(p => p.id === selectedId) ?? null
 
@@ -380,12 +384,7 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
 
         {/* Right: detail */}
         <div className="flex-1 min-w-0">
-          {!project ? (
-            <div className="h-48 flex flex-col items-center justify-center text-slate-600 gap-3 border border-dashed border-slate-700/60 rounded-2xl">
-              <p className="text-2xl">👈</p>
-              <p className="text-sm">Оберіть проєкт зліва</p>
-            </div>
-          ) : (
+          {project ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-2xl">{project.emoji}</span>
@@ -407,6 +406,10 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
               {section === 'reports' && (
                 <InlineReportsPanel key={project.id} project={project} onSave={reps => saveReps(project, reps)} />
               )}
+            </div>
+          ) : (
+            <div className="h-48 flex flex-col items-center justify-center text-slate-600 gap-2">
+              <p className="text-sm">Немає проєктів — створіть перший у розділі Проєкти</p>
             </div>
           )}
         </div>
