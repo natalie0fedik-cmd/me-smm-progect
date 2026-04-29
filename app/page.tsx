@@ -956,7 +956,35 @@ function Sidebar({active,onNav}:{active:NavView;onNav:(v:NavView)=>void}) {
 
 // ─── DashboardView ────────────────────────────────────────────────────────────
 
+const SECTION_STEPS: { keys: (keyof ProjectData)[]; label: string }[] = [
+  { keys: ['companyName','companyIndustry','companyGeo'],   label: 'базову інформацію' },
+  { keys: ['goals'],                                         label: 'цілі' },
+  { keys: ['tasks'],                                         label: 'задачі' },
+  { keys: ['brandMission','brandVision','brandValues'],     label: 'ДНК бренду' },
+  { keys: ['uvp'],                                           label: 'УЦП' },
+  { keys: ['toneOfVoice','contentRubricator'],              label: 'контент-стратегію' },
+  { keys: ['analytics','competitorAnalysis'],               label: 'аналітику' },
+  { keys: ['paidTools','organicTools'],                     label: 'стратегію просування' },
+  { keys: ['bioStructure','highlights'],                    label: 'біо та хайлайти' },
+  { keys: ['kpi'],                                           label: 'KPI' },
+  { keys: ['implementationStages'],                         label: 'план реалізації' },
+]
+
+function nextStepLabel(data: ProjectData): string | null {
+  for (const s of SECTION_STEPS) {
+    if (s.keys.some(k => !data[k]?.trim())) return s.label
+  }
+  return null
+}
+
+const MONTHS_SHORT_UA = ['січ','лют','бер','квіт','трав','черв','лип','серп','вер','жовт','лист','груд']
+function fmtUpdated(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getDate()} ${MONTHS_SHORT_UA[d.getMonth()]}.`
+}
+
 function DashboardView({projects,onNavigate}:{projects:Project[];onNavigate:(v:NavView)=>void}) {
+  const router = useRouter()
   const now = new Date()
   const todayStr = now.toISOString().slice(0,10)
   const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1)
@@ -1043,18 +1071,28 @@ function DashboardView({projects,onNavigate}:{projects:Project[];onNavigate:(v:N
               {projects.slice(0,5).map(p=>{
                 const prog=getProgress(p.data)
                 const color=getProjectColor(p.id)
+                const next=nextStepLabel(p.data)
                 return (
-                  <div key={p.id} style={{display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:36,height:36,borderRadius:10,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:13,fontWeight:700,flexShrink:0}}>
+                  <div key={p.id} onClick={()=>router.push(`/projects/${p.id}`)}
+                    style={{display:'flex',alignItems:'flex-start',gap:12,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.12s',margin:'0 -10px'}}
+                    onMouseEnter={e=>(e.currentTarget.style.backgroundColor='rgba(255,255,255,0.03)')}
+                    onMouseLeave={e=>(e.currentTarget.style.backgroundColor='transparent')}>
+                    <div style={{width:36,height:36,borderRadius:10,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:13,fontWeight:700,flexShrink:0,marginTop:2}}>
                       {projectInitials(p.name)}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
                         <p style={{color:'#d1d5db',fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
                         <span style={{color:'#4b5563',fontSize:11,flexShrink:0,marginLeft:8}}>{prog}%</span>
                       </div>
-                      <div style={{height:4,backgroundColor:'#0f1e30',borderRadius:2}}>
-                        <div style={{height:4,borderRadius:2,backgroundColor:color,width:`${prog}%`,transition:'width 0.3s'}}/>
+                      <div style={{height:3,backgroundColor:'#0f1e30',borderRadius:2,marginBottom:6}}>
+                        <div style={{height:3,borderRadius:2,backgroundColor:color,width:`${prog}%`,transition:'width 0.3s'}}/>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        {prog<100&&next
+                          ? <span style={{color:'#374151',fontSize:11}}>→ заповнити {next}</span>
+                          : <span style={{color:'#10b981',fontSize:11}}>✓ повністю заповнено</span>}
+                        <span style={{color:'#1f2937',fontSize:11,flexShrink:0,marginLeft:8}}>{fmtUpdated(p.updatedAt)}</span>
                       </div>
                     </div>
                   </div>
