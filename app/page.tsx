@@ -1708,16 +1708,24 @@ function ProjectsView({projects,onRefresh}:{projects:Project[];onRefresh:()=>voi
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+const NAV_STORAGE_KEY = 'smm_active_nav'
+const VALID_VIEWS: NavView[] = ['dashboard','projects','calendar','analytics']
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([])
-  const [nav, setNav] = useState<NavView>('dashboard')
+  const [nav, setNav] = useState<NavView>(() => {
+    if (typeof window === 'undefined') return 'dashboard'
+    const saved = localStorage.getItem(NAV_STORAGE_KEY) as NavView | null
+    return saved && VALID_VIEWS.includes(saved) ? saved : 'dashboard'
+  })
   useEffect(()=>{setProjects(getProjects())},[])
   function refresh(){setProjects(getProjects())}
+  function navigate(v: NavView) { setNav(v); localStorage.setItem(NAV_STORAGE_KEY, v) }
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden',backgroundColor:'#070d1a'}}>
-      <Sidebar active={nav} onNav={setNav} projects={projects}/>
+      <Sidebar active={nav} onNav={navigate} projects={projects}/>
       <main style={{flex:1,overflowY:'auto',backgroundColor:'#070d1a'}}>
-        {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={setNav}/>}
+        {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={navigate}/>}
         {nav==='projects'&&<ProjectsView projects={projects} onRefresh={refresh}/>}
         {nav==='calendar'&&<div style={{padding:'36px 44px'}}><CalendarView projects={projects}/></div>}
         {nav==='analytics'&&<div style={{padding:'36px 44px'}}><AnalyticsView projects={projects} onUpdate={refresh}/></div>}
