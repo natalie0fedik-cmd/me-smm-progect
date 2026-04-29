@@ -448,29 +448,29 @@ function CalendarView({ projects }: { projects: Project[] }) {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
+  const [viewMode, setViewMode] = useState<'week'|'month'|'list'>('week')
+  const [weekAnchor, setWeekAnchor] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+    return d.toISOString().slice(0, 10)
+  })
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [filterProject, setFilterProject] = useState('')
   const [form, setForm] = useState<{ open: boolean; date: string; editing: CalendarEvent | null }>({ open: false, date: '', editing: null })
-  const [draft, setDraft] = useState<Omit<CalendarEvent, 'id'>>({ title: '', date: '', time: '', type: 'meeting', projectId: '', notes: '' })
+  const [draft, setDraft] = useState<Omit<CalendarEvent, 'id'>>({ title: '', date: '', time: '', type: 'publish', projectId: '', notes: '' })
 
   useEffect(() => { setEvents(getCalendarEvents()) }, [])
 
-  function persist(next: CalendarEvent[]) {
-    saveCalendarEvents(next)
-    setEvents(next)
-  }
+  function persist(next: CalendarEvent[]) { saveCalendarEvents(next); setEvents(next) }
 
-  function openAdd(date: string) {
-    setDraft({ title: '', date, time: '', type: 'meeting', projectId: '', notes: '' })
+  function openAdd(date: string, time?: string) {
+    setDraft({ title: '', date, time: time ?? '', type: 'publish', projectId: '', notes: '' })
     setForm({ open: true, date, editing: null })
   }
-
   function openEdit(ev: CalendarEvent, e: React.MouseEvent) {
     e.stopPropagation()
     setDraft({ title: ev.title, date: ev.date, time: ev.time, type: ev.type, projectId: ev.projectId, notes: ev.notes })
     setForm({ open: true, date: ev.date, editing: ev })
   }
-
   function saveEvent() {
     if (!draft.title.trim()) return
     if (form.editing) {
@@ -480,253 +480,356 @@ function CalendarView({ projects }: { projects: Project[] }) {
     }
     setForm({ open: false, date: '', editing: null })
   }
-
   function deleteEvent(id: string) {
     persist(events.filter(ev => ev.id !== id))
     setForm({ open: false, date: '', editing: null })
   }
-
   function prevMonth() { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
   function nextMonth() { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+  function prevWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()-7); setWeekAnchor(d.toISOString().slice(0,10)) }
+  function nextWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()+7); setWeekAnchor(d.toISOString().slice(0,10)) }
 
   const today = todayIso()
   const firstDayOfWeek = ((new Date(year, month, 1).getDay() + 6) % 7)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells = Array.from({ length: Math.ceil((firstDayOfWeek + daysInMonth) / 7) * 7 }, (_, i) => {
-    const d = i - firstDayOfWeek + 1
-    return d >= 1 && d <= daysInMonth ? d : null
+    const d = i - firstDayOfWeek + 1; return d >= 1 && d <= daysInMonth ? d : null
+  })
+
+  const weekDays = Array.from({length:7}, (_,i) => {
+    const d = new Date(weekAnchor); d.setDate(d.getDate()+i)
+    const iso = d.toISOString().slice(0,10)
+    return {iso, day:d.getDate(), monthIdx:d.getMonth(), label:WEEKDAYS[i], isToday:iso===today, isWeekend:i>=5}
   })
 
   const filtered = filterProject ? events.filter(ev => ev.projectId === filterProject) : events
   const byDate = filtered.reduce<Record<string, CalendarEvent[]>>((acc, ev) => {
-    if (!acc[ev.date]) acc[ev.date] = []
-    acc[ev.date].push(ev)
-    return acc
+    if (!acc[ev.date]) acc[ev.date] = []; acc[ev.date].push(ev); return acc
   }, {})
+
+  const periodLabel = viewMode==='month' ? `${MONTHS_UK[month]} ${year}` : viewMode==='week' ? (()=>{
+    const s=new Date(weekDays[0].iso), e=new Date(weekDays[6].iso)
+    if (s.getMonth()===e.getMonth()) return `${s.getDate()}–${e.getDate()} ${MONTHS_UK[e.getMonth()].toLowerCase()} ${e.getFullYear()}`
+    return `${s.getDate()} ${MONTHS_UK[s.getMonth()].slice(0,3).toLowerCase()} – ${e.getDate()} ${MONTHS_UK[e.getMonth()].slice(0,3).toLowerCase()} ${e.getFullYear()}`
+  })() : 'Список подій'
+
+  const HOURS = Array.from({length:14}, (_,i)=>i+8) // 8..21
+
+  const allFutureEvents = filtered
+    .filter(e=>e.date>=today)
+    .sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.time||'').localeCompare(b.time||''))
+  const byDateList = allFutureEvents.reduce<Record<string,CalendarEvent[]>>((acc,ev)=>{
+    if(!acc[ev.date]) acc[ev.date]=[]; acc[ev.date].push(ev); return acc
+  },{})
 
   return (
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-1 py-1">
-          <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-white font-semibold text-sm px-2 min-w-[140px] text-center">
-            {MONTHS_UK[month]} {year}
-          </span>
-          <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <select
-          value={filterProject}
-          onChange={e => setFilterProject(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer"
-        >
-          <option value="">Всі проєкти</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-        </select>
-
-        <button
-          onClick={() => openAdd(today)}
-          className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-        >
-          <Plus size={15} /> Додати подію
-        </button>
-      </div>
-
-      {/* Calendar grid */}
-      <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden relative">
-        {/* Empty state overlay */}
-        {events.length === 0 && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-[2px] rounded-2xl">
-            <div className="text-center">
-              <p className="text-3xl mb-3">🗓️</p>
-              <p className="text-slate-300 font-semibold text-base mb-1">Календар порожній</p>
-              <p className="text-slate-500 text-sm mb-5">Додай першу подію — нараду, зйомку або публікацію</p>
-              <button
-                onClick={() => openAdd(today)}
-                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
-              >
-                <Plus size={15} /> Додати подію
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 border-b border-slate-700/60">
-          {WEEKDAYS.map(d => (
-            <div key={d} className={`py-2.5 text-center text-xs font-semibold tracking-wider ${d === 'Сб' || d === 'Нд' ? 'text-slate-500' : 'text-slate-500'}`}>{d}</div>
+        <div className="flex bg-slate-800 border border-slate-700 rounded-xl p-1 gap-0.5">
+          {(['week','month','list'] as const).map(v=>(
+            <button key={v} onClick={()=>setViewMode(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode===v?'bg-indigo-600 text-white':'text-slate-400 hover:text-white'}`}>
+              {v==='week'?'Тиждень':v==='month'?'Місяць':'Список'}
+            </button>
           ))}
         </div>
 
-        {/* Day cells */}
-        <div className="grid grid-cols-7">
-          {cells.map((day, idx) => {
-            if (!day) return <div key={idx} className="min-h-[90px] border-b border-r border-slate-700/30 bg-slate-900/20" />
-            const iso = toIsoDate(year, month, day)
-            const dayEvents = byDate[iso] ?? []
-            const isToday = iso === today
-            const isWeekend = idx % 7 >= 5
-            return (
-              <div
-                key={idx}
-                onClick={() => openAdd(iso)}
-                className={`min-h-[90px] border-b border-r border-slate-700/30 p-1.5 cursor-pointer transition-colors hover:bg-slate-700/20 ${isWeekend ? 'bg-slate-900/10' : ''}`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1 ${isToday ? 'bg-indigo-600 text-white' : isWeekend ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {day}
+        {viewMode!=='list'&&(
+          <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-1 py-1">
+            <button onClick={viewMode==='week'?prevWeek:prevMonth}
+              className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
+              <ChevronLeft size={16}/>
+            </button>
+            <span className="text-white font-semibold text-sm px-2 min-w-[170px] text-center">{periodLabel}</span>
+            <button onClick={viewMode==='week'?nextWeek:nextMonth}
+              className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
+              <ChevronRight size={16}/>
+            </button>
+          </div>
+        )}
+
+        <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer">
+          <option value="">Всі проєкти</option>
+          {projects.map(p=><option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+        </select>
+
+        <button onClick={()=>openAdd(today)}
+          className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+          <Plus size={15}/> Додати подію
+        </button>
+      </div>
+
+      {/* ── MONTH VIEW ── */}
+      {viewMode==='month'&&(
+        <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden relative">
+          {events.length===0&&(
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-[2px] rounded-2xl">
+              <div className="text-center">
+                <p className="text-3xl mb-3">🗓️</p>
+                <p className="text-slate-300 font-semibold text-base mb-1">Календар порожній</p>
+                <p className="text-slate-500 text-sm mb-5">Додай першу подію — нараду, зйомку або публікацію</p>
+                <button onClick={()=>openAdd(today)}
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
+                  <Plus size={15}/> Додати подію
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-7 border-b border-slate-700/60">
+            {WEEKDAYS.map(d=><div key={d} className="py-2.5 text-center text-xs font-semibold tracking-wider text-slate-500">{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7">
+            {cells.map((day,idx)=>{
+              if(!day) return <div key={idx} className="min-h-[90px] border-b border-r border-slate-700/30 bg-slate-900/20"/>
+              const iso=toIsoDate(year,month,day)
+              const dayEvents=byDate[iso]??[]
+              const isToday=iso===today
+              const isWeekend=idx%7>=5
+              return (
+                <div key={idx} onClick={()=>openAdd(iso)}
+                  className={`min-h-[90px] border-b border-r border-slate-700/30 p-1.5 cursor-pointer transition-colors hover:bg-slate-700/20 ${isWeekend?'bg-slate-900/10':''}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1 ${isToday?'bg-indigo-600 text-white':isWeekend?'text-slate-500':'text-slate-400'}`}>{day}</div>
+                  <div className="space-y-0.5">
+                    {dayEvents.slice(0,3).map(ev=>{
+                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      return (
+                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
+                          className="rounded px-1.5 py-0.5 text-[11px] leading-tight truncate border cursor-pointer hover:opacity-80 transition-opacity"
+                          style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
+                          {cfg.icon} {ev.title}
+                        </div>
+                      )
+                    })}
+                    {dayEvents.length>3&&<div className="text-[10px] text-slate-500 px-1">+{dayEvents.length-3} ще</div>}
+                  </div>
                 </div>
-                <div className="space-y-0.5">
-                  {dayEvents.slice(0, 3).map(ev => {
-                    const cfg = EVENT_TYPE_CONFIG[ev.type]
-                    return (
-                      <div
-                        key={ev.id}
-                        onClick={e => openEdit(ev, e)}
-                        className="rounded px-1.5 py-0.5 text-[11px] leading-tight truncate border cursor-pointer hover:opacity-80 transition-opacity"
-                        style={{ backgroundColor: cfg.bg, borderColor: cfg.border, color: cfg.text }}
-                      >
-                        {cfg.icon} {ev.title}
-                      </div>
-                    )
-                  })}
-                  {dayEvents.length > 3 && (
-                    <div className="text-[10px] text-slate-500 px-1">+{dayEvents.length - 3} ще</div>
-                  )}
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── WEEK VIEW ── */}
+      {viewMode==='week'&&(
+        <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden">
+          {/* Day headers */}
+          <div className="grid border-b border-slate-700/60" style={{gridTemplateColumns:'52px repeat(7,1fr)'}}>
+            <div className="border-r border-slate-700/30"/>
+            {weekDays.map(d=>(
+              <div key={d.iso} className={`py-3 text-center border-r border-slate-700/30 last:border-r-0 ${d.isWeekend?'bg-slate-900/20':''}`}>
+                <p className="text-xs text-slate-500 font-medium">{d.label}</p>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold mx-auto mt-0.5 ${d.isToday?'bg-indigo-600 text-white':'text-slate-300'}`}>
+                  {d.day}
                 </div>
               </div>
-            )
-          })}
+            ))}
+          </div>
+          {/* All-day row */}
+          {weekDays.some(d=>(byDate[d.iso]??[]).some(e=>!e.time))&&(
+            <div className="grid border-b border-slate-700/60" style={{gridTemplateColumns:'52px repeat(7,1fr)'}}>
+              <div className="flex items-center justify-center border-r border-slate-700/30 py-1.5">
+                <span className="text-[10px] text-slate-600 font-medium rotate-0 leading-none text-center">весь<br/>день</span>
+              </div>
+              {weekDays.map(d=>{
+                const allDay=(byDate[d.iso]??[]).filter(e=>!e.time)
+                return (
+                  <div key={d.iso} className={`border-r border-slate-700/30 last:border-r-0 p-1 min-h-[28px] ${d.isWeekend?'bg-slate-900/10':''}`}>
+                    {allDay.map(ev=>{
+                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      return (
+                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
+                          className="rounded px-1.5 py-0.5 text-[11px] truncate border cursor-pointer hover:opacity-80 mb-0.5"
+                          style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
+                          {cfg.icon} {ev.title}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {/* Time grid */}
+          <div className="overflow-y-auto" style={{maxHeight:560}}>
+            {HOURS.map(h=>(
+              <div key={h} className="grid border-b border-slate-700/20 last:border-b-0" style={{gridTemplateColumns:'52px repeat(7,1fr)',minHeight:48}}>
+                <div className="border-r border-slate-700/30 flex items-start justify-end pr-2 pt-1">
+                  <span className="text-[10px] text-slate-600">{String(h).padStart(2,'0')}:00</span>
+                </div>
+                {weekDays.map(d=>{
+                  const hourEvents=(byDate[d.iso]??[]).filter(ev=>{
+                    if(!ev.time) return false
+                    const [hh]=ev.time.split(':').map(Number)
+                    return hh===h
+                  })
+                  return (
+                    <div key={d.iso} onClick={()=>openAdd(d.iso,`${String(h).padStart(2,'0')}:00`)}
+                      className={`border-r border-slate-700/20 last:border-r-0 p-0.5 cursor-pointer hover:bg-slate-700/20 transition-colors ${d.isWeekend?'bg-slate-900/10':''}`}>
+                      {hourEvents.map(ev=>{
+                        const cfg=EVENT_TYPE_CONFIG[ev.type]
+                        return (
+                          <div key={ev.id} onClick={e=>openEdit(ev,e)}
+                            className="rounded px-1.5 py-1 text-[11px] border cursor-pointer hover:opacity-80 mb-0.5"
+                            style={{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}}>
+                            <span className="font-semibold">{ev.time}</span> {cfg.icon} <span className="truncate">{ev.title}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+          {/* Empty week state */}
+          {weekDays.every(d=>!(byDate[d.iso]?.length))&&(
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <p className="text-slate-500 text-sm">Цього тижня подій немає</p>
+              <button onClick={()=>openAdd(weekDays.find(d=>d.isToday)?.iso??weekDays[0].iso)}
+                className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">
+                <Plus size={14}/> Додати подію
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* ── LIST VIEW ── */}
+      {viewMode==='list'&&(
+        <div className="space-y-4">
+          {allFutureEvents.length===0?(
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <p className="text-3xl">🗓️</p>
+              <p className="text-slate-300 font-semibold">Майбутніх подій немає</p>
+              <p className="text-slate-500 text-sm mb-2">Заплануй нараду, зйомку або публікацію</p>
+              <button onClick={()=>openAdd(today)}
+                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
+                <Plus size={15}/> Додати подію
+              </button>
+            </div>
+          ):(
+            Object.entries(byDateList).map(([date,evs])=>{
+              const d=new Date(date)
+              const isToday=date===today
+              const label=isToday?'Сьогодні':d.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'})
+              return (
+                <div key={date}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`text-xs font-semibold uppercase tracking-wider ${isToday?'text-indigo-400':'text-slate-500'}`}>{label}</span>
+                    <div className="flex-1 h-px bg-slate-700/50"/>
+                  </div>
+                  <div className="space-y-2">
+                    {evs.map(ev=>{
+                      const cfg=EVENT_TYPE_CONFIG[ev.type]
+                      const proj=projects.find(p=>p.id===ev.projectId)
+                      return (
+                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity"
+                          style={{backgroundColor:cfg.bg,borderColor:cfg.border}}>
+                          <span className="text-base flex-shrink-0">{cfg.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm" style={{color:cfg.text}}>{ev.title}</p>
+                            {ev.notes&&<p className="text-xs text-slate-500 truncate mt-0.5">{ev.notes}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {ev.time&&<span className="text-xs font-semibold" style={{color:cfg.text}}>{ev.time}</span>}
+                            {proj&&<span className="text-xs text-slate-500">{proj.emoji} {proj.name}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3">
-        {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([, cfg]) => (
+        {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([,cfg])=>(
           <div key={cfg.label} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg.border }} />
+            <span className="w-2 h-2 rounded-full" style={{backgroundColor:cfg.border}}/>
             {cfg.icon} {cfg.label}
           </div>
         ))}
       </div>
 
       {/* Event form modal */}
-      {form.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setForm({ open: false, date: '', editing: null })}>
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+      {form.open&&(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={()=>setForm({open:false,date:'',editing:null})}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-semibold text-lg">{form.editing ? 'Редагувати подію' : 'Нова подія'}</h2>
-              <button onClick={() => setForm({ open: false, date: '', editing: null })} className="text-slate-500 hover:text-white transition-colors">
-                <X size={18} />
+              <h2 className="text-white font-semibold text-lg">{form.editing?'Редагувати подію':'Нова подія'}</h2>
+              <button onClick={()=>setForm({open:false,date:'',editing:null})} className="text-slate-500 hover:text-white transition-colors">
+                <X size={18}/>
               </button>
             </div>
-
             <div className="space-y-4">
-              {/* Title */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Назва *</label>
-                <input
-                  type="text"
-                  value={draft.title}
-                  onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
-                  placeholder="Що відбувається?"
-                  autoFocus
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors"
-                />
+                <input type="text" value={draft.title} onChange={e=>setDraft(d=>({...d,title:e.target.value}))}
+                  placeholder="Що відбувається?" autoFocus
+                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors"/>
               </div>
-
-              {/* Date + Time */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400 mb-1 block">Дата</label>
-                  <input
-                    type="date"
-                    value={draft.date}
-                    onChange={e => setDraft(d => ({ ...d, date: e.target.value }))}
-                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"
-                  />
+                  <input type="date" value={draft.date} onChange={e=>setDraft(d=>({...d,date:e.target.value}))}
+                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"/>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Clock size={11} /> Час (необов.)</label>
-                  <input
-                    type="time"
-                    value={draft.time}
-                    onChange={e => setDraft(d => ({ ...d, time: e.target.value }))}
-                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"
-                  />
+                  <label className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Clock size={11}/> Час (необов.)</label>
+                  <input type="time" value={draft.time} onChange={e=>setDraft(d=>({...d,time:e.target.value}))}
+                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"/>
                 </div>
               </div>
-
-              {/* Type */}
               <div>
                 <label className="text-xs text-slate-400 mb-2 block">Тип події</label>
                 <div className="flex flex-wrap gap-2">
-                  {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([type, cfg]) => (
-                    <button
-                      key={type}
-                      onClick={() => setDraft(d => ({ ...d, type }))}
+                  {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([type,cfg])=>(
+                    <button key={type} onClick={()=>setDraft(d=>({...d,type}))}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
-                      style={draft.type === type
-                        ? { backgroundColor: cfg.bg, borderColor: cfg.border, color: cfg.text }
-                        : { backgroundColor: 'rgba(30,41,59,0.6)', borderColor: 'rgba(71,85,105,0.5)', color: '#64748b' }}
-                    >
+                      style={draft.type===type
+                        ?{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}
+                        :{backgroundColor:'rgba(30,41,59,0.6)',borderColor:'rgba(71,85,105,0.5)',color:'#64748b'}}>
                       {cfg.icon} {cfg.label}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Project */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Проєкт (необов.)</label>
-                <select
-                  value={draft.projectId}
-                  onChange={e => setDraft(d => ({ ...d, projectId: e.target.value }))}
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm outline-none"
-                >
+                <select value={draft.projectId} onChange={e=>setDraft(d=>({...d,projectId:e.target.value}))}
+                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm outline-none">
                   <option value="">Без проєкту</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                  {projects.map(p=><option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
                 </select>
               </div>
-
-              {/* Notes */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Нотатки (необов.)</label>
-                <textarea
-                  value={draft.notes}
-                  onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))}
-                  placeholder="Деталі, посилання на зустріч..."
-                  rows={2}
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors resize-none"
-                />
+                <textarea value={draft.notes} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))}
+                  placeholder="Деталі, посилання на зустріч..." rows={2}
+                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors resize-none"/>
               </div>
             </div>
-
             <div className="flex gap-3 mt-5">
-              {form.editing && (
-                <button
-                  onClick={() => deleteEvent(form.editing!.id)}
-                  className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-sm font-medium transition-colors"
-                >
+              {form.editing&&(
+                <button onClick={()=>deleteEvent(form.editing!.id)}
+                  className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-sm font-medium transition-colors">
                   Видалити
                 </button>
               )}
-              <button
-                onClick={() => setForm({ open: false, date: '', editing: null })}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-              >
+              <button onClick={()=>setForm({open:false,date:'',editing:null})}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
                 Скасувати
               </button>
-              <button
-                onClick={saveEvent}
-                disabled={!draft.title.trim()}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-              >
-                {form.editing ? 'Зберегти' : 'Додати'}
+              <button onClick={saveEvent} disabled={!draft.title.trim()}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
+                {form.editing?'Зберегти':'Додати'}
               </button>
             </div>
           </div>
