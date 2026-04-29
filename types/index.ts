@@ -10,6 +10,18 @@ export interface CalendarEvent {
   notes: string
 }
 
+export interface PostMetric {
+  id: string
+  projectId: string
+  date: string          // "YYYY-MM-DD"
+  platform: string      // "Instagram", "TikTok", etc.
+  format: string        // "Рілс", "Пост", "Сторіс", etc.
+  category: string      // "Експертний", "Розважальний", etc.
+  title: string         // short post description (optional)
+  metrics: Record<string, string>  // "Охоплення": "12400", "ER%": "3.5", …
+  notes: string
+}
+
 export interface ProjectData {
   // 1. ХТО МИ — structured fields
   companyName: string

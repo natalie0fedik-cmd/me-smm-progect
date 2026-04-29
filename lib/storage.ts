@@ -1,7 +1,32 @@
-import { Project, ProjectData, EMPTY_PROJECT_DATA, CalendarEvent } from '@/types'
+import { Project, ProjectData, EMPTY_PROJECT_DATA, CalendarEvent, PostMetric } from '@/types'
 
 const STORAGE_KEY = 'smm_projects'
 const CALENDAR_KEY = 'smm_calendar_events'
+const POST_METRICS_KEY = 'smm_post_metrics'
+
+export function getPostMetrics(projectId: string): PostMetric[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(POST_METRICS_KEY)
+    if (!raw) return []
+    const all: PostMetric[] = JSON.parse(raw)
+    return all.filter(m => m.projectId === projectId)
+  } catch { return [] }
+}
+
+export function savePostMetric(metric: PostMetric): void {
+  const raw = localStorage.getItem(POST_METRICS_KEY)
+  const all: PostMetric[] = raw ? JSON.parse(raw) : []
+  const idx = all.findIndex(m => m.id === metric.id)
+  if (idx >= 0) all[idx] = metric; else all.push(metric)
+  localStorage.setItem(POST_METRICS_KEY, JSON.stringify(all))
+}
+
+export function deletePostMetric(id: string): void {
+  const raw = localStorage.getItem(POST_METRICS_KEY)
+  const all: PostMetric[] = raw ? JSON.parse(raw) : []
+  localStorage.setItem(POST_METRICS_KEY, JSON.stringify(all.filter(m => m.id !== id)))
+}
 
 export function getCalendarEvents(): CalendarEvent[] {
   if (typeof window === 'undefined') return []

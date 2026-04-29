@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, type LucideIcon } from 'lucide-react'
-import { Project, ProjectData, CalendarEvent, CalendarEventType } from '@/types'
-import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents } from '@/lib/storage'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, Edit3, type LucideIcon } from 'lucide-react'
+import { Project, ProjectData, CalendarEvent, CalendarEventType, PostMetric } from '@/types'
+import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents, getPostMetrics, savePostMetric, deletePostMetric } from '@/lib/storage'
 
 // ─── Analytics types & helpers ───────────────────────────────────────────────
 
@@ -311,11 +311,283 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   )
 }
 
+// ─── Post metrics constants ───────────────────────────────────────────────────
+
+const POST_PLATFORM_METRICS: Record<string, string[]> = {
+  Instagram:  ['Охоплення','Покази','Лайки','Коментарі','Репости','Збережень','ER%','Перегляди'],
+  TikTok:     ['Перегляди','Лайки','Коментарі','Репости','Збережень','ER%','Час перегляду (сек)'],
+  Facebook:   ['Охоплення','Покази','Лайки','Коментарі','Репости','ER%'],
+  LinkedIn:   ['Покази','Кліки','Лайки','Коментарі','CTR%','ER%'],
+  YouTube:    ['Перегляди','Лайки','Коментарі','Підписники+','CTR%','Час перегляду (год)'],
+  Telegram:   ['Перегляди','Репости','Реакції','ERR%'],
+  'Twitter/X':['Покази','Лайки','Репости','Цитати','Кліки'],
+  Pinterest:  ['Покази','Кліки','Збережень','ER%'],
+  Threads:    ['Лайки','Репости','Відповіді','Цитати'],
+}
+
+const POST_PLATFORM_FORMATS: Record<string, string[]> = {
+  Instagram:   ['Пост','Рілс','Сторіс','Карусель','Прямий ефір'],
+  TikTok:      ['Відео','Слайдшоу','Прямий ефір'],
+  Facebook:    ['Пост','Відео','Рілс','Сторіс','Прямий ефір'],
+  LinkedIn:    ['Пост','Стаття','Відео','Карусель','Опитування'],
+  YouTube:     ['Відео','Shorts','Прямий ефір'],
+  Telegram:    ['Пост','Відео','Опитування','Голосування'],
+  'Twitter/X': ['Твіт','Тред','Відповідь'],
+  Pinterest:   ['Пін','Відео-пін','Ідея-пін'],
+  Threads:     ['Пост','Відповідь'],
+}
+
+const POST_CATEGORIES = [
+  'Експертний','Розважальний','Продаючий','Навчальний',
+  'Надихаючий','UGC','За лаштунками','Новини/Тренди',
+]
+
+const DEFAULT_ALL_PLATFORMS = Object.keys(POST_PLATFORM_METRICS)
+
+function fmtMetricValue(v: string): string {
+  const n = parseFloat(v.replace(/[^\d.]/g,''))
+  if (isNaN(n)) return v
+  if (v.includes('%')) return `${n}%`
+  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n/1_000).toFixed(n>=10_000?0:1)}K`
+  return String(Math.round(n))
+}
+
+// ─── PostMetricsPanel ─────────────────────────────────────────────────────────
+
+function PostMetricsPanel({ project }: { project: Project }) {
+  const today = new Date().toISOString().slice(0,10)
+  const platforms = project.platforms.length > 0 ? project.platforms : DEFAULT_ALL_PLATFORMS
+
+  const emptyDraft = (): PostMetric => ({
+    id: '', projectId: project.id,
+    date: today, platform: platforms[0], format: '', category: '',
+    title: '', metrics: {}, notes: '',
+  })
+
+  const [posts, setPosts]   = useState<PostMetric[]>([])
+  const [draft, setDraft]   = useState<PostMetric>(emptyDraft)
+  const [editId, setEditId] = useState<string|null>(null)
+
+  useEffect(() => { setPosts(getPostMetrics(project.id)) }, [project.id])
+
+  const platformMetrics = POST_PLATFORM_METRICS[draft.platform] ?? []
+  const platformFormats = POST_PLATFORM_FORMATS[draft.platform] ?? []
+
+  function setField<K extends keyof PostMetric>(k: K, v: PostMetric[K]) {
+    setDraft(d => {
+      const next = { ...d, [k]: v }
+      if (k === 'platform') {
+        next.format = ''
+        next.metrics = {}
+      }
+      return next
+    })
+  }
+
+  function setMetric(name: string, val: string) {
+    setDraft(d => ({ ...d, metrics: { ...d.metrics, [name]: val } }))
+  }
+
+  function hasAnyMetric() {
+    return Object.values(draft.metrics).some(v => v.trim() !== '')
+  }
+
+  function save() {
+    if (!draft.format || !draft.category || !hasAnyMetric()) return
+    const m: PostMetric = { ...draft, id: editId ?? crypto.randomUUID() }
+    savePostMetric(m)
+    setPosts(getPostMetrics(project.id))
+    setDraft(emptyDraft())
+    setEditId(null)
+  }
+
+  function startEdit(p: PostMetric) {
+    setDraft({ ...p })
+    setEditId(p.id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function remove(id: string) {
+    deletePostMetric(id)
+    setPosts(getPostMetrics(project.id))
+    if (editId === id) { setDraft(emptyDraft()); setEditId(null) }
+  }
+
+  const sortedPosts = [...posts].sort((a,b) => b.date.localeCompare(a.date))
+
+  const inputCls = "w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm outline-none transition-colors"
+  const chipBase = "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
+  const chipOn   = "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
+  const chipOff  = "bg-slate-800/60 border-slate-700/50 text-slate-500 hover:text-slate-300"
+
+  return (
+    <div className="space-y-6">
+      {/* ── Form ── */}
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5 space-y-4">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          {editId ? 'Редагувати пост' : 'Новий пост'}
+        </p>
+
+        {/* Row 1: date + platform */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1.5 block">Дата публікації</label>
+            <input type="date" value={draft.date} onChange={e=>setField('date',e.target.value)} className={inputCls}/>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1.5 block">Платформа</label>
+            <div className="flex flex-wrap gap-1.5">
+              {platforms.map(pl=>(
+                <button key={pl} onClick={()=>setField('platform',pl)}
+                  className={`${chipBase} ${draft.platform===pl?chipOn:chipOff}`}
+                  style={draft.platform===pl ? {borderColor:(PLATFORM_COLORS[pl]||'#6366f1')+'88',color:PLATFORM_COLORS[pl]||'#a5b4fc',backgroundColor:(PLATFORM_COLORS[pl]||'#6366f1')+'22'} : {}}>
+                  {pl}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Format */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1.5 block">Формат</label>
+          <div className="flex flex-wrap gap-1.5">
+            {platformFormats.map(f=>(
+              <button key={f} onClick={()=>setField('format',f)}
+                className={`${chipBase} ${draft.format===f?chipOn:chipOff}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Category */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1.5 block">Тип контенту</label>
+          <div className="flex flex-wrap gap-1.5">
+            {POST_CATEGORIES.map(c=>(
+              <button key={c} onClick={()=>setField('category',c)}
+                className={`${chipBase} ${draft.category===c?chipOn:chipOff}`}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Title */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1.5 block">Опис / заголовок поста (необов.)</label>
+          <input value={draft.title} onChange={e=>setField('title',e.target.value)}
+            placeholder="Короткий опис або початок підпису…" className={inputCls}/>
+        </div>
+
+        {/* Metrics grid */}
+        {platformMetrics.length > 0 && (
+          <div>
+            <label className="text-xs text-slate-500 mb-1.5 block">Метрики ({draft.platform})</label>
+            <div className="grid grid-cols-2 gap-2" style={{gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))'}}>
+              {platformMetrics.map(m=>(
+                <div key={m}>
+                  <label className="text-[11px] text-slate-500 mb-1 block">{m}</label>
+                  <input value={draft.metrics[m]??''} onChange={e=>setMetric(m,e.target.value)}
+                    placeholder="0" className={inputCls}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1.5 block">Нотатки (необов.)</label>
+          <textarea value={draft.notes} onChange={e=>setField('notes',e.target.value)}
+            placeholder="Що спрацювало / не спрацювало…" rows={2}
+            className={`${inputCls} resize-none`} style={{minHeight:60}}/>
+        </div>
+
+        <div className="flex gap-3">
+          {editId && (
+            <button onClick={()=>{setDraft(emptyDraft());setEditId(null)}}
+              className="px-4 py-2 rounded-xl text-sm border border-slate-700 text-slate-400 hover:text-white transition-colors">
+              Скасувати
+            </button>
+          )}
+          <button onClick={save}
+            disabled={!draft.format || !draft.category || !hasAnyMetric()}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 rounded-xl text-sm font-semibold transition-colors">
+            {editId ? 'Зберегти зміни' : '+ Зберегти пост'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── History ── */}
+      {sortedPosts.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">Збережені пости ({sortedPosts.length})</p>
+          {sortedPosts.map(post=>{
+            const pMetrics = POST_PLATFORM_METRICS[post.platform] ?? []
+            const keyMetrics = pMetrics.slice(0,4)
+            return (
+              <div key={post.id}
+                className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-slate-500">{post.date}</span>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">{post.format}</span>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-400 border border-slate-600/40">{post.category}</span>
+                    {post.platform && <span className="text-xs text-slate-600">{post.platform}</span>}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button onClick={()=>startEdit(post)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
+                      <Edit3 size={13}/>
+                    </button>
+                    <button onClick={()=>remove(post.id)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      <Trash2 size={13}/>
+                    </button>
+                  </div>
+                </div>
+
+                {post.title && <p className="text-sm text-slate-300 truncate">{post.title}</p>}
+
+                {/* Metric chips */}
+                <div className="flex flex-wrap gap-2">
+                  {keyMetrics.filter(m=>post.metrics[m]).map(m=>(
+                    <span key={m} className="flex items-baseline gap-1">
+                      <span className="text-[10px] text-slate-600">{m}</span>
+                      <span className="text-xs font-semibold text-slate-300">{fmtMetricValue(post.metrics[m])}</span>
+                    </span>
+                  ))}
+                  {pMetrics.slice(4).filter(m=>post.metrics[m]).map(m=>(
+                    <span key={m} className="flex items-baseline gap-1">
+                      <span className="text-[10px] text-slate-600">{m}</span>
+                      <span className="text-xs font-semibold text-slate-300">{fmtMetricValue(post.metrics[m])}</span>
+                    </span>
+                  ))}
+                </div>
+
+                {post.notes && <p className="text-xs text-slate-600 italic">{post.notes}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {sortedPosts.length === 0 && (
+        <p className="text-center text-slate-600 text-sm py-6">Ще немає збережених постів — заповніть форму вище</p>
+      )}
+    </div>
+  )
+}
+
+
 // ─── Analytics view ───────────────────────────────────────────────────────────
 
 function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: () => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(() => projects[0]?.id ?? null)
-  const [section, setSection] = useState<'kpi' | 'reports'>('kpi')
+  const [section, setSection] = useState<'kpi' | 'reports' | 'posts'>('kpi')
 
   useEffect(() => {
     setSelectedId(id => id && projects.find(p => p.id === id) ? id : (projects[0]?.id ?? null))
@@ -400,6 +672,10 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${section === 'reports' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
                     Звіти (факт)
                   </button>
+                  <button onClick={() => setSection('posts')}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${section === 'posts' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Пости
+                  </button>
                 </div>
               </div>
               {section === 'kpi' && (
@@ -407,6 +683,9 @@ function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: 
               )}
               {section === 'reports' && (
                 <InlineReportsPanel key={project.id} project={project} onSave={reps => saveReps(project, reps)} />
+              )}
+              {section === 'posts' && (
+                <PostMetricsPanel key={project.id} project={project} />
               )}
             </div>
           ) : (
