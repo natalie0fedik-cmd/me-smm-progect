@@ -832,21 +832,45 @@ function DashboardView({projects,onNavigate}:{projects:Project[];onNavigate:(v:N
         <p style={{color:'#4b5563',fontSize:14}}>{now.toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
       </div>
 
-      {/* Stat cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:32}}>
-        {[
-          {label:'Активних проєктів',value:activeProjects,sub:`з ${totalProjects} загалом`,color:'#3b82f6'},
-          {label:'Подій цього тижня',value:events.length,sub:'в контент-планері',color:'#8b5cf6'},
-          {label:'Публікацій',value:events.filter(e=>e.type==='publish').length,sub:'цього тижня',color:'#10b981'},
-          {label:'Зустрічей',value:events.filter(e=>e.type==='meeting').length,sub:'цього тижня',color:'#f59e0b'},
-        ].map(s=>(
-          <div key={s.label} style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:'20px 22px'}}>
-            <p style={{color:'#4b5563',fontSize:12,marginBottom:8}}>{s.label}</p>
-            <p style={{fontSize:32,fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</p>
-            <p style={{color:'#374151',fontSize:12,marginTop:6}}>{s.sub}</p>
+      {/* Stat cards — hidden until user has at least one project */}
+      {totalProjects === 0 ? (
+        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:'28px 32px',marginBottom:32}}>
+          <p style={{color:'#e2e8f0',fontSize:16,fontWeight:600,marginBottom:6}}>З чого почати</p>
+          <p style={{color:'#4b5563',fontSize:13,marginBottom:24}}>Три кроки, щоб запустити перший SMM-проєкт</p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+            {[
+              {step:'01',title:'Створи проєкт',desc:'Додай клієнта або бренд, обери платформи',cta:'Створити →',nav:'projects' as NavView,color:'#3b82f6'},
+              {step:'02',title:'Заповни стратегію',desc:'Цілі, аудиторія, УЦП, тон комунікації',cta:'До проєктів →',nav:'projects' as NavView,color:'#8b5cf6'},
+              {step:'03',title:'Заплануй перший пост',desc:'Відкрий контент-планер і постав дату',cta:'До планера →',nav:'calendar' as NavView,color:'#10b981'},
+            ].map(s=>(
+              <div key={s.step} style={{backgroundColor:'#0f1e30',borderRadius:12,padding:'18px 20px',border:'1px solid rgba(255,255,255,0.04)'}}>
+                <p style={{color:s.color,fontSize:11,fontWeight:700,letterSpacing:'0.08em',marginBottom:8}}>{s.step}</p>
+                <p style={{color:'#e2e8f0',fontSize:13,fontWeight:600,marginBottom:4}}>{s.title}</p>
+                <p style={{color:'#4b5563',fontSize:12,marginBottom:14,lineHeight:1.5}}>{s.desc}</p>
+                <button onClick={()=>onNavigate(s.nav)}
+                  style={{background:'none',border:'none',color:s.color,fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}>
+                  {s.cta}
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:32}}>
+          {[
+            {label:'Активних проєктів',value:activeProjects,sub:`з ${totalProjects} загалом`,color:'#3b82f6'},
+            {label:'Подій цього тижня',value:events.length,sub:'в контент-планері',color:'#8b5cf6'},
+            {label:'Публікацій',value:events.filter(e=>e.type==='publish').length,sub:'цього тижня',color:'#10b981'},
+            {label:'Зустрічей',value:events.filter(e=>e.type==='meeting').length,sub:'цього тижня',color:'#f59e0b'},
+          ].map(s=>(
+            <div key={s.label} style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:'20px 22px'}}>
+              <p style={{color:'#4b5563',fontSize:12,marginBottom:8}}>{s.label}</p>
+              <p style={{fontSize:32,fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</p>
+              <p style={{color:'#374151',fontSize:12,marginTop:6}}>{s.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
         {/* Projects list */}
