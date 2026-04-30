@@ -314,15 +314,36 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
 // ─── Post metrics constants ───────────────────────────────────────────────────
 
 const POST_PLATFORM_METRICS: Record<string, string[]> = {
-  Instagram:  ['Охоплення','Покази','Лайки','Коментарі','Репости','Збережень','ER%','Перегляди'],
-  TikTok:     ['Перегляди','Лайки','Коментарі','Репости','Збережень','ER%','Час перегляду (сек)'],
-  Facebook:   ['Охоплення','Покази','Лайки','Коментарі','Репости','ER%'],
-  LinkedIn:   ['Покази','Кліки','Лайки','Коментарі','CTR%','ER%'],
+  Instagram:  ['Охоплення','Покази','Лайки','Коментарі','Репости','Збережень','Перегляди'],
+  TikTok:     ['Перегляди','Лайки','Коментарі','Репости','Збережень','Час перегляду (сек)'],
+  Facebook:   ['Охоплення','Покази','Лайки','Коментарі','Репости'],
+  LinkedIn:   ['Покази','Кліки','Лайки','Коментарі','CTR%'],
   YouTube:    ['Перегляди','Лайки','Коментарі','Підписники+','CTR%','Час перегляду (год)'],
-  Telegram:   ['Перегляди','Репости','Реакції','ERR%'],
+  Telegram:   ['Перегляди','Репости','Реакції'],
   'Twitter/X':['Покази','Лайки','Репости','Цитати','Кліки'],
-  Pinterest:  ['Покази','Кліки','Збережень','ER%'],
+  Pinterest:  ['Покази','Кліки','Збережень'],
   Threads:    ['Лайки','Репости','Відповіді','Цитати'],
+}
+
+// ER% numerator fields and denominator per platform
+const ER_FORMULA: Record<string, { num: string[]; den: string; label: string }> = {
+  Instagram:   { num: ['Лайки','Коментарі','Репости','Збережень'], den: 'Охоплення',  label: 'ER%' },
+  TikTok:      { num: ['Лайки','Коментарі','Репости','Збережень'], den: 'Перегляди',  label: 'ER%' },
+  Facebook:    { num: ['Лайки','Коментарі','Репости'],             den: 'Охоплення',  label: 'ER%' },
+  LinkedIn:    { num: ['Лайки','Коментарі','Кліки'],               den: 'Покази',     label: 'ER%' },
+  Pinterest:   { num: ['Кліки','Збережень'],                       den: 'Покази',     label: 'ER%' },
+  'Twitter/X': { num: ['Лайки','Репости','Цитати','Кліки'],        den: 'Покази',     label: 'ER%' },
+  Telegram:    { num: ['Репости','Реакції'],                        den: 'Перегляди',  label: 'ERR%' },
+  Threads:     { num: ['Лайки','Репости','Відповіді'],             den: 'Покази',     label: 'ER%' },
+}
+
+function calcER(platform: string, metrics: Record<string,string>): string | null {
+  const f = ER_FORMULA[platform]
+  if (!f) return null
+  const den = parseFloat(metrics[f.den] ?? '')
+  if (!den) return null
+  const num = f.num.reduce((s, k) => s + (parseFloat(metrics[k] ?? '') || 0), 0)
+  return ((num / den) * 100).toFixed(2)
 }
 
 const POST_PLATFORM_FORMATS: Record<string, string[]> = {
@@ -395,7 +416,12 @@ function PostMetricsPanel({ project }: { project: Project }) {
 
   function save() {
     if (!draft.format || !draft.category || !hasAnyMetric()) return
-    const m: PostMetric = { ...draft, id: editId ?? crypto.randomUUID() }
+    const er = calcER(draft.platform, draft.metrics)
+    const erLabel = ER_FORMULA[draft.platform]?.label
+    const metricsWithER = er && erLabel
+      ? { ...draft.metrics, [erLabel]: er }
+      : draft.metrics
+    const m: PostMetric = { ...draft, metrics: metricsWithER, id: editId ?? crypto.randomUUID() }
     savePostMetric(m)
     setPosts(getPostMetrics(project.id))
     setDraft(emptyDraft())
@@ -486,7 +512,7 @@ function PostMetricsPanel({ project }: { project: Project }) {
         {platformMetrics.length > 0 && (
           <div>
             <label className="text-xs text-slate-500 mb-1.5 block">Метрики ({draft.platform})</label>
-            <div className="grid grid-cols-2 gap-2" style={{gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))'}}>
+            <div className="grid gap-2 mb-3" style={{gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))'}}>
               {platformMetrics.map(m=>(
                 <div key={m}>
                   <label className="text-[11px] text-slate-500 mb-1 block">{m}</label>
@@ -495,6 +521,21 @@ function PostMetricsPanel({ project }: { project: Project }) {
                 </div>
               ))}
             </div>
+            {/* Auto-computed ER% */}
+            {ER_FORMULA[draft.platform] && (()=>{
+              const er = calcER(draft.platform, draft.metrics)
+              const label = ER_FORMULA[draft.platform].label
+              const f = ER_FORMULA[draft.platform]
+              return (
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20">
+                  <span className="text-xs text-indigo-400 font-semibold">{label}</span>
+                  <span className="text-lg font-bold text-indigo-300">{er ? `${er}%` : '—'}</span>
+                  <span className="text-[10px] text-slate-600 ml-auto">
+                    авто · ({f.num.join(' + ')}) / {f.den} × 100
+                  </span>
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -527,6 +568,7 @@ function PostMetricsPanel({ project }: { project: Project }) {
           <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">Збережені пости ({sortedPosts.length})</p>
           {sortedPosts.map(post=>{
             const pMetrics = POST_PLATFORM_METRICS[post.platform] ?? []
+            const erLabel = ER_FORMULA[post.platform]?.label
             const keyMetrics = pMetrics.slice(0,4)
             return (
               <div key={post.id}
@@ -553,14 +595,15 @@ function PostMetricsPanel({ project }: { project: Project }) {
                 {post.title && <p className="text-sm text-slate-300 truncate">{post.title}</p>}
 
                 {/* Metric chips */}
-                <div className="flex flex-wrap gap-2">
-                  {keyMetrics.filter(m=>post.metrics[m]).map(m=>(
-                    <span key={m} className="flex items-baseline gap-1">
-                      <span className="text-[10px] text-slate-600">{m}</span>
-                      <span className="text-xs font-semibold text-slate-300">{fmtMetricValue(post.metrics[m])}</span>
+                <div className="flex flex-wrap gap-3 items-baseline">
+                  {/* ER% first and highlighted */}
+                  {erLabel && post.metrics[erLabel] && (
+                    <span className="flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-indigo-950/50 border border-indigo-500/30">
+                      <span className="text-[10px] text-indigo-500">{erLabel}</span>
+                      <span className="text-sm font-bold text-indigo-300">{post.metrics[erLabel]}%</span>
                     </span>
-                  ))}
-                  {pMetrics.slice(4).filter(m=>post.metrics[m]).map(m=>(
+                  )}
+                  {[...keyMetrics, ...pMetrics.slice(4)].filter(m=>post.metrics[m]).map(m=>(
                     <span key={m} className="flex items-baseline gap-1">
                       <span className="text-[10px] text-slate-600">{m}</span>
                       <span className="text-xs font-semibold text-slate-300">{fmtMetricValue(post.metrics[m])}</span>
