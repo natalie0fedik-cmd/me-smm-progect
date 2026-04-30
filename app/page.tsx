@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, Edit3, type LucideIcon } from 'lucide-react'
 import { Project, ProjectData, CalendarEvent, CalendarEventType, PostMetric } from '@/types'
@@ -196,15 +196,28 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   const [draftMonth, setDraftMonth] = useState(thisMonth)
   const [draftActuals, setDraftActuals] = useState<Record<string, string>>({})
   const [draftNotes, setDraftNotes] = useState('')
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipSave = useRef(true) // skip first render before loadMonth fires
 
   function save(next: MonthlyRep[]) { onSave(next) }
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
 
+  function doSave(actuals: Record<string, string>, notes: string, month: string) {
+    const existing = reports.find(r => r.month === month)
+    if (existing) {
+      save(reports.map(r => r.month === month ? { ...r, actuals, notes } : r))
+    } else {
+      save([{ id: crypto.randomUUID(), month, actuals, notes }, ...reports])
+    }
+    setSavedAt(new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }))
+  }
+
   function loadMonth(month: string) {
+    skipSave.current = true
     setDraftMonth(month)
     const r = reports.find(rep => rep.month === month)
     const { actuals: postActuals } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
-    // Merge: saved report values take priority, then post aggregation fills the rest
     const base = r ? { ...postActuals, ...r.actuals } : postActuals
     setDraftActuals(base)
     setDraftNotes(r ? r.notes : '')
@@ -213,20 +226,15 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   // Auto-fill on mount
   useEffect(() => { loadMonth(draftMonth) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function saveReport() {
-    const existing = reports.find(r => r.month === draftMonth)
-    if (existing) {
-      save(reports.map(r => r.month === draftMonth ? { ...r, actuals: draftActuals, notes: draftNotes } : r))
-    } else {
-      save([{ id: crypto.randomUUID(), month: draftMonth, actuals: draftActuals, notes: draftNotes }, ...reports])
-    }
-    // After save, reset form and advance to next empty month
-    const [y, m] = draftMonth.split('-').map(Number)
-    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
-    setDraftMonth(next)
-    setDraftActuals({})
-    setDraftNotes('')
-  }
+  // Auto-save with 800ms debounce whenever facts or notes change
+  useEffect(() => {
+    if (skipSave.current) { skipSave.current = false; return }
+    const anyFact = kpis.some(k => (draftActuals[k.name] ?? '').trim())
+    if (!anyFact) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => doSave(draftActuals, draftNotes, draftMonth), 800)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  }, [draftActuals, draftNotes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (kpis.length === 0) {
     return (
@@ -238,21 +246,23 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
     )
   }
 
-  const isEdit = reports.some(r => r.month === draftMonth)
-  const anyFact = kpis.some(k => (draftActuals[k.name] ?? '').trim())
-
   return (
     <div className="space-y-6">
       {/* Form */}
       <div className="bg-slate-900/50 border border-slate-700/60 rounded-2xl overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 bg-slate-800/60 border-b border-slate-700/60 flex-wrap">
-          <span className="text-sm font-semibold text-white">{isEdit ? 'Редагувати звіт' : 'Новий звіт'}</span>
+          <span className="text-sm font-semibold text-white">Звіт за місяць</span>
           <input
             type="month" value={draftMonth}
             onChange={e => loadMonth(e.target.value)}
             className="bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors"
           />
-          {isEdit && <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-lg">Звіт існує — оновлюється</span>}
+          <span className="ml-auto text-xs text-slate-500">
+            {savedAt
+              ? <span className="text-emerald-400/80">● Збережено {savedAt}</span>
+              : <span className="text-slate-600">Зберігається автоматично</span>
+            }
+          </span>
         </div>
 
         <div className="p-5 space-y-4">
@@ -295,14 +305,6 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
             className="w-full bg-slate-800/50 border border-slate-700 focus:border-slate-500 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 outline-none resize-none transition-colors"
           />
 
-          <button
-            onClick={saveReport}
-            disabled={!anyFact}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: anyFact ? '#4f46e5' : '#1e293b', color: '#ffffff' }}
-          >
-            {isEdit ? '✓ Оновити звіт' : '✓ Зберегти звіт'}
-          </button>
         </div>
       </div>
 
