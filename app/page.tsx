@@ -201,22 +201,17 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
 
   function loadMonth(month: string) {
-    const r = reports.find(rep => rep.month === month)
     setDraftMonth(month)
-    setDraftActuals(r ? { ...r.actuals } : {})
+    const r = reports.find(rep => rep.month === month)
+    const { actuals: postActuals } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
+    // Merge: saved report values take priority, then post aggregation fills the rest
+    const base = r ? { ...postActuals, ...r.actuals } : postActuals
+    setDraftActuals(base)
     setDraftNotes(r ? r.notes : '')
   }
 
-  function fillFromPosts() {
-    const { actuals } = aggregateMonthPosts(project.id, draftMonth, kpis.map(k => k.name))
-    setDraftActuals(prev => {
-      const merged = { ...prev }
-      for (const [k, v] of Object.entries(actuals)) merged[k] = v
-      return merged
-    })
-  }
-
-  const { count: postCount } = aggregateMonthPosts(project.id, draftMonth, kpis.map(k => k.name))
+  // Auto-fill on mount
+  useEffect(() => { loadMonth(draftMonth) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function saveReport() {
     const existing = reports.find(r => r.month === draftMonth)
@@ -258,12 +253,6 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
             className="bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors"
           />
           {isEdit && <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-lg">Звіт існує — оновлюється</span>}
-          {postCount > 0 && (
-            <button onClick={fillFromPosts}
-              className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 transition-colors">
-              ↓ З постів ({postCount})
-            </button>
-          )}
         </div>
 
         <div className="p-5 space-y-4">
