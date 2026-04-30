@@ -155,6 +155,38 @@ function parseDelta(fact: string, plan: string): { value: string; positive: bool
   return { value: `${pct >= 0 ? '+' : ''}${Math.round(pct)}%`, positive: pct >= 0 }
 }
 
+function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[]): { actuals: Record<string,string>; count: number } {
+  const posts = getPostMetrics(projectId).filter(p => p.date.startsWith(month))
+  if (posts.length === 0) return { actuals: {}, count: 0 }
+
+  const totals: Record<string, number> = {}
+  for (const post of posts) {
+    for (const [key, val] of Object.entries(post.metrics)) {
+      if (key === 'ER%' || key === 'ERR%') continue
+      const n = parseFloat(val)
+      if (!isNaN(n)) totals[key] = (totals[key] ?? 0) + n
+    }
+  }
+
+  // ER% — recalculate from aggregated totals per platform formula
+  const platformsInPosts = Array.from(new Set(posts.map(p => p.platform)))
+  for (const platform of platformsInPosts) {
+    const f = ER_FORMULA[platform]
+    if (!f) continue
+    const num = f.num.reduce((s, k) => s + (totals[k] ?? 0), 0)
+    const den = totals[f.den] ?? 0
+    if (den > 0) totals[f.label] = parseFloat(((num / den) * 100).toFixed(2))
+  }
+
+  const actuals: Record<string,string> = {}
+  for (const name of kpiNames) {
+    const v = totals[name]
+    if (v !== undefined) actuals[name] = name.endsWith('%') ? String(v) : String(Math.round(v))
+  }
+
+  return { actuals, count: posts.length }
+}
+
 function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (reports: MonthlyRep[]) => void }) {
   const kpis = parseKM(project.data.kpi)
   const reports = parseMR(project.data.monthlyReports)
@@ -174,6 +206,17 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
     setDraftActuals(r ? { ...r.actuals } : {})
     setDraftNotes(r ? r.notes : '')
   }
+
+  function fillFromPosts() {
+    const { actuals } = aggregateMonthPosts(project.id, draftMonth, kpis.map(k => k.name))
+    setDraftActuals(prev => {
+      const merged = { ...prev }
+      for (const [k, v] of Object.entries(actuals)) merged[k] = v
+      return merged
+    })
+  }
+
+  const { count: postCount } = aggregateMonthPosts(project.id, draftMonth, kpis.map(k => k.name))
 
   function saveReport() {
     const existing = reports.find(r => r.month === draftMonth)
@@ -215,6 +258,12 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
             className="bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors"
           />
           {isEdit && <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-lg">Звіт існує — оновлюється</span>}
+          {postCount > 0 && (
+            <button onClick={fillFromPosts}
+              className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 transition-colors">
+              ↓ З постів ({postCount})
+            </button>
+          )}
         </div>
 
         <div className="p-5 space-y-4">
