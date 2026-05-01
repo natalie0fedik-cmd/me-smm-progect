@@ -194,51 +194,45 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   const now = new Date()
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [draftMonth, setDraftMonth] = useState(thisMonth)
-  const [draftActuals, setDraftActuals] = useState<Record<string, string>>({})
-  const [draftNotes, setDraftNotes] = useState('')
   const [postTotals, setPostTotals] = useState<Record<string,number>>({})
+  const [postActuals, setPostActuals] = useState<Record<string,string>>({})
   const [postCount, setPostCount] = useState(0)
+  const [draftNotes, setDraftNotes] = useState('')
   const [savedAt, setSavedAt] = useState<string | null>(null)
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const skipSave = useRef(true)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentMonth = useRef(thisMonth)
 
   function save(next: MonthlyRep[]) { onSave(next) }
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
 
-  function doSave(actuals: Record<string, string>, notes: string, month: string) {
-    const existing = reports.find(r => r.month === month)
-    if (existing) {
-      save(reports.map(r => r.month === month ? { ...r, actuals, notes } : r))
-    } else {
-      save([{ id: crypto.randomUUID(), month, actuals, notes }, ...reports])
-    }
-    setSavedAt(new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }))
+  function scheduleSave(actuals: Record<string,string>, notes: string, month: string) {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      if (!Object.keys(actuals).length && !notes.trim()) return
+      const existing = reports.find(r => r.month === month)
+      if (existing) {
+        save(reports.map(r => r.month === month ? { ...r, actuals, notes } : r))
+      } else {
+        save([{ id: crypto.randomUUID(), month, actuals, notes }, ...reports])
+      }
+      setSavedAt(new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }))
+    }, 400)
   }
 
   function loadMonth(month: string) {
-    skipSave.current = true
+    currentMonth.current = month
     setDraftMonth(month)
     const r = reports.find(rep => rep.month === month)
-    const { actuals: postActuals, totals, count } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
+    const { actuals, totals, count } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
     setPostTotals(totals)
+    setPostActuals(actuals)
     setPostCount(count)
-    const base = r ? { ...postActuals, ...r.actuals } : postActuals
-    setDraftActuals(base)
-    setDraftNotes(r ? r.notes : '')
+    const notes = r ? r.notes : ''
+    setDraftNotes(notes)
+    scheduleSave(actuals, notes, month)
   }
 
-  // Auto-fill on mount
   useEffect(() => { loadMonth(draftMonth) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-save with 800ms debounce whenever facts or notes change
-  useEffect(() => {
-    if (skipSave.current) { skipSave.current = false; return }
-    const anyFact = kpis.some(k => (draftActuals[k.name] ?? '').trim())
-    if (!anyFact && !draftNotes.trim()) return
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(() => doSave(draftActuals, draftNotes, draftMonth), 800)
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
-  }, [draftActuals, draftNotes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (kpis.length === 0) {
     return (
@@ -271,18 +265,47 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
 
         <div className="p-5 space-y-5">
 
-          {/* Auto-aggregated post metrics for the month */}
+          {/* KPI plan vs auto-fact (read-only) */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_140px_140px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
+              <span>KPI</span>
+              <span className="text-center">План</span>
+              <span className="text-center">Факт (з постів)</span>
+              <span className="text-center">Δ</span>
+            </div>
+            {kpis.map(kpi => {
+              const fact = postActuals[kpi.name] ?? ''
+              const delta = parseDelta(fact, kpi.target)
+              return (
+                <div key={kpi.id} className="grid grid-cols-[1fr_140px_140px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
+                  style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
+                  <span className="text-sm text-slate-300">{kpi.name}</span>
+                  <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
+                  <span className="text-sm text-center font-semibold rounded-lg py-1.5"
+                    style={{ color: fact ? '#6ee7b7' : '#475569' }}>
+                    {fact || '—'}
+                  </span>
+                  <span className="text-sm text-center font-semibold"
+                    style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
+                    {delta ? delta.value : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* All raw post metrics for the month */}
           {postCount > 0 && Object.keys(postTotals).length > 0 && (
-            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+            <div className="rounded-xl border border-slate-700/40 bg-slate-900/30 p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Дані з постів за місяць</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Усі метрики з постів</span>
                 <span className="text-xs text-slate-600 bg-slate-800 rounded-full px-2 py-0.5">{postCount} {postCount === 1 ? 'пост' : postCount < 5 ? 'пости' : 'постів'}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(postTotals).map(([key, val]) => (
                   <div key={key} className="flex items-center justify-between gap-2 bg-slate-900/60 rounded-lg px-3 py-2">
-                    <span className="text-xs text-slate-400 truncate">{key}</span>
-                    <span className="text-sm font-semibold text-white whitespace-nowrap">
+                    <span className="text-xs text-slate-500 truncate">{key}</span>
+                    <span className="text-sm font-semibold text-slate-200 whitespace-nowrap">
                       {key.endsWith('%') ? val.toFixed(2) + '%' : Math.round(val).toLocaleString('uk-UA')}
                     </span>
                   </div>
@@ -291,46 +314,18 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
             </div>
           )}
 
-          {/* KPI plan vs fact rows */}
-          {kpis.length > 0 && (
-            <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_130px_130px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
-                <span>KPI</span>
-                <span className="text-center">План</span>
-                <span className="text-center">Факт</span>
-                <span className="text-center">Δ</span>
-              </div>
-              {kpis.map(kpi => {
-                const fact = draftActuals[kpi.name] ?? ''
-                const delta = parseDelta(fact, kpi.target)
-                const fromPost = fact && postTotals[kpi.name] !== undefined && String(Math.round(postTotals[kpi.name])) === fact
-                return (
-                  <div key={kpi.id} className="grid grid-cols-[1fr_130px_130px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
-                    style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
-                    <span className="text-sm text-slate-300 flex items-center gap-1.5">
-                      {kpi.name}
-                      {fromPost && <span className="text-[10px] text-indigo-400/70">↑ пост</span>}
-                    </span>
-                    <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
-                    <input
-                      type="text" value={fact}
-                      onChange={e => setDraftActuals(a => ({ ...a, [kpi.name]: e.target.value }))}
-                      placeholder="Вкажіть факт"
-                      className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-600 bg-slate-800"
-                      style={{ borderColor: fact ? 'rgba(16,185,129,0.5)' : '#334155', color: fact ? '#6ee7b7' : '#94a3b8' }}
-                    />
-                    <span className="text-sm text-center font-semibold"
-                      style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
-                      {delta ? delta.value : '—'}
-                    </span>
-                  </div>
-                )
-              })}
+          {postCount === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-700/50 p-5 text-center space-y-1">
+              <p className="text-sm text-slate-500">Немає постів за цей місяць</p>
+              <p className="text-xs text-slate-600">Додайте пости з метриками — факти з&apos;являться автоматично</p>
             </div>
           )}
 
           <textarea
-            value={draftNotes} onChange={e => setDraftNotes(e.target.value)}
+            value={draftNotes} onChange={e => {
+              setDraftNotes(e.target.value)
+              scheduleSave(postActuals, e.target.value, currentMonth.current)
+            }}
             placeholder="Нотатки за місяць: що спрацювало, що ні..."
             rows={2}
             className="w-full bg-slate-800/50 border border-slate-700 focus:border-slate-500 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 outline-none resize-none transition-colors"
