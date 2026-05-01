@@ -155,9 +155,9 @@ function parseDelta(fact: string, plan: string): { value: string; positive: bool
   return { value: `${pct >= 0 ? '+' : ''}${Math.round(pct)}%`, positive: pct >= 0 }
 }
 
-function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[]): { actuals: Record<string,string>; count: number } {
+function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[]): { actuals: Record<string,string>; totals: Record<string,number>; count: number } {
   const posts = getPostMetrics(projectId).filter(p => p.date.startsWith(month))
-  if (posts.length === 0) return { actuals: {}, count: 0 }
+  if (posts.length === 0) return { actuals: {}, totals: {}, count: 0 }
 
   const totals: Record<string, number> = {}
   for (const post of posts) {
@@ -168,7 +168,7 @@ function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[
     }
   }
 
-  // ER% — recalculate from aggregated totals per platform formula
+  // ER%/ERR% — recalculate from aggregated totals per platform formula
   const platformsInPosts = Array.from(new Set(posts.map(p => p.platform)))
   for (const platform of platformsInPosts) {
     const f = ER_FORMULA[platform]
@@ -184,7 +184,7 @@ function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[
     if (v !== undefined) actuals[name] = name.endsWith('%') ? String(v) : String(Math.round(v))
   }
 
-  return { actuals, count: posts.length }
+  return { actuals, totals, count: posts.length }
 }
 
 function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (reports: MonthlyRep[]) => void }) {
@@ -196,9 +196,11 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   const [draftMonth, setDraftMonth] = useState(thisMonth)
   const [draftActuals, setDraftActuals] = useState<Record<string, string>>({})
   const [draftNotes, setDraftNotes] = useState('')
+  const [postTotals, setPostTotals] = useState<Record<string,number>>({})
+  const [postCount, setPostCount] = useState(0)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const skipSave = useRef(true) // skip first render before loadMonth fires
+  const skipSave = useRef(true)
 
   function save(next: MonthlyRep[]) { onSave(next) }
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
@@ -217,7 +219,9 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
     skipSave.current = true
     setDraftMonth(month)
     const r = reports.find(rep => rep.month === month)
-    const { actuals: postActuals } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
+    const { actuals: postActuals, totals, count } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
+    setPostTotals(totals)
+    setPostCount(count)
     const base = r ? { ...postActuals, ...r.actuals } : postActuals
     setDraftActuals(base)
     setDraftNotes(r ? r.notes : '')
@@ -230,7 +234,7 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   useEffect(() => {
     if (skipSave.current) { skipSave.current = false; return }
     const anyFact = kpis.some(k => (draftActuals[k.name] ?? '').trim())
-    if (!anyFact) return
+    if (!anyFact && !draftNotes.trim()) return
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => doSave(draftActuals, draftNotes, draftMonth), 800)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
@@ -265,38 +269,65 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
           </span>
         </div>
 
-        <div className="p-5 space-y-4">
-          {/* KPI rows */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_130px_130px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
-              <span>Показник</span>
-              <span className="text-center">План</span>
-              <span className="text-center">Факт</span>
-              <span className="text-center">Δ</span>
+        <div className="p-5 space-y-5">
+
+          {/* Auto-aggregated post metrics for the month */}
+          {postCount > 0 && Object.keys(postTotals).length > 0 && (
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Дані з постів за місяць</span>
+                <span className="text-xs text-slate-600 bg-slate-800 rounded-full px-2 py-0.5">{postCount} {postCount === 1 ? 'пост' : postCount < 5 ? 'пости' : 'постів'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(postTotals).map(([key, val]) => (
+                  <div key={key} className="flex items-center justify-between gap-2 bg-slate-900/60 rounded-lg px-3 py-2">
+                    <span className="text-xs text-slate-400 truncate">{key}</span>
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">
+                      {key.endsWith('%') ? val.toFixed(2) + '%' : Math.round(val).toLocaleString('uk-UA')}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            {kpis.map(kpi => {
-              const fact = draftActuals[kpi.name] ?? ''
-              const delta = parseDelta(fact, kpi.target)
-              return (
-                <div key={kpi.id} className="grid grid-cols-[1fr_130px_130px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
-                  style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
-                  <span className="text-sm text-slate-300">{kpi.name}</span>
-                  <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
-                  <input
-                    type="text" value={fact}
-                    onChange={e => setDraftActuals(a => ({ ...a, [kpi.name]: e.target.value }))}
-                    placeholder="Вкажіть факт"
-                    className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-600 bg-slate-800"
-                    style={{ borderColor: fact ? 'rgba(16,185,129,0.5)' : '#334155', color: fact ? '#6ee7b7' : '#94a3b8' }}
-                  />
-                  <span className="text-sm text-center font-semibold"
-                    style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
-                    {delta ? delta.value : '—'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+          )}
+
+          {/* KPI plan vs fact rows */}
+          {kpis.length > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_130px_130px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
+                <span>KPI</span>
+                <span className="text-center">План</span>
+                <span className="text-center">Факт</span>
+                <span className="text-center">Δ</span>
+              </div>
+              {kpis.map(kpi => {
+                const fact = draftActuals[kpi.name] ?? ''
+                const delta = parseDelta(fact, kpi.target)
+                const fromPost = fact && postTotals[kpi.name] !== undefined && String(Math.round(postTotals[kpi.name])) === fact
+                return (
+                  <div key={kpi.id} className="grid grid-cols-[1fr_130px_130px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
+                    <span className="text-sm text-slate-300 flex items-center gap-1.5">
+                      {kpi.name}
+                      {fromPost && <span className="text-[10px] text-indigo-400/70">↑ пост</span>}
+                    </span>
+                    <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
+                    <input
+                      type="text" value={fact}
+                      onChange={e => setDraftActuals(a => ({ ...a, [kpi.name]: e.target.value }))}
+                      placeholder="Вкажіть факт"
+                      className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-600 bg-slate-800"
+                      style={{ borderColor: fact ? 'rgba(16,185,129,0.5)' : '#334155', color: fact ? '#6ee7b7' : '#94a3b8' }}
+                    />
+                    <span className="text-sm text-center font-semibold"
+                      style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
+                      {delta ? delta.value : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <textarea
             value={draftNotes} onChange={e => setDraftNotes(e.target.value)}
