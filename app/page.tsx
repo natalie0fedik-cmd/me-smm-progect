@@ -196,27 +196,35 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
   const [draftMonth, setDraftMonth] = useState(thisMonth)
   const [postTotals, setPostTotals] = useState<Record<string,number>>({})
   const [postActuals, setPostActuals] = useState<Record<string,string>>({})
+  const [manualActuals, setManualActuals] = useState<Record<string,string>>({})
   const [postCount, setPostCount] = useState(0)
   const [draftNotes, setDraftNotes] = useState('')
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentMonth = useRef(thisMonth)
+  const postActualsRef = useRef<Record<string,string>>({})
 
   function save(next: MonthlyRep[]) { onSave(next) }
   function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
 
-  function scheduleSave(actuals: Record<string,string>, notes: string, month: string) {
+  function scheduleSave(allActuals: Record<string,string>, notes: string, month: string) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      if (!Object.keys(actuals).length && !notes.trim()) return
+      if (!Object.keys(allActuals).length && !notes.trim()) return
       const existing = reports.find(r => r.month === month)
       if (existing) {
-        save(reports.map(r => r.month === month ? { ...r, actuals, notes } : r))
+        save(reports.map(r => r.month === month ? { ...r, actuals: allActuals, notes } : r))
       } else {
-        save([{ id: crypto.randomUUID(), month, actuals, notes }, ...reports])
+        save([{ id: crypto.randomUUID(), month, actuals: allActuals, notes }, ...reports])
       }
       setSavedAt(new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }))
     }, 400)
+  }
+
+  function updateManual(name: string, val: string, curPostActuals: Record<string,string>, notes: string, month: string) {
+    const next = { ...manualActuals, [name]: val }
+    setManualActuals(next)
+    scheduleSave({ ...curPostActuals, ...next }, notes, month)
   }
 
   function loadMonth(month: string) {
@@ -226,10 +234,19 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
     const { actuals, totals, count } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
     setPostTotals(totals)
     setPostActuals(actuals)
+    postActualsRef.current = actuals
     setPostCount(count)
+    // manual actuals = saved values for KPIs not covered by posts
+    const savedManual: Record<string,string> = {}
+    if (r) {
+      for (const [k, v] of Object.entries(r.actuals)) {
+        if (!actuals[k]) savedManual[k] = v
+      }
+    }
+    setManualActuals(savedManual)
     const notes = r ? r.notes : ''
     setDraftNotes(notes)
-    scheduleSave(actuals, notes, month)
+    scheduleSave({ ...actuals, ...savedManual }, notes, month)
   }
 
   useEffect(() => { loadMonth(draftMonth) }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -265,26 +282,37 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
 
         <div className="p-5 space-y-5">
 
-          {/* KPI plan vs auto-fact (read-only) */}
+          {/* KPI plan vs fact — auto from posts, or manual input if no post data */}
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_140px_140px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
               <span>KPI</span>
               <span className="text-center">План</span>
-              <span className="text-center">Факт (з постів)</span>
+              <span className="text-center">Факт</span>
               <span className="text-center">Δ</span>
             </div>
             {kpis.map(kpi => {
-              const fact = postActuals[kpi.name] ?? ''
+              const fromPost = postActuals[kpi.name] ?? ''
+              const manual = manualActuals[kpi.name] ?? ''
+              const fact = fromPost || manual
               const delta = parseDelta(fact, kpi.target)
               return (
                 <div key={kpi.id} className="grid grid-cols-[1fr_140px_140px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
                   style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
                   <span className="text-sm text-slate-300">{kpi.name}</span>
                   <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
-                  <span className="text-sm text-center font-semibold rounded-lg py-1.5"
-                    style={{ color: fact ? '#6ee7b7' : '#475569' }}>
-                    {fact || '—'}
-                  </span>
+                  {fromPost ? (
+                    <span className="text-sm text-center font-semibold py-1.5" style={{ color: '#6ee7b7' }}>
+                      {fromPost}
+                    </span>
+                  ) : (
+                    <input
+                      type="text" value={manual}
+                      onChange={e => updateManual(kpi.name, e.target.value, postActualsRef.current, draftNotes, currentMonth.current)}
+                      placeholder="Вручну"
+                      className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-700 bg-slate-800/80"
+                      style={{ borderColor: manual ? 'rgba(99,102,241,0.5)' : '#334155', color: manual ? '#a5b4fc' : '#94a3b8' }}
+                    />
+                  )}
                   <span className="text-sm text-center font-semibold"
                     style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
                     {delta ? delta.value : '—'}
@@ -324,7 +352,7 @@ function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (re
           <textarea
             value={draftNotes} onChange={e => {
               setDraftNotes(e.target.value)
-              scheduleSave(postActuals, e.target.value, currentMonth.current)
+              scheduleSave({ ...postActualsRef.current, ...manualActuals }, e.target.value, currentMonth.current)
             }}
             placeholder="Нотатки за місяць: що спрацювало, що ні..."
             rows={2}
