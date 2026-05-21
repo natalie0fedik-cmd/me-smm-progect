@@ -939,20 +939,142 @@ function CompetitorForm({ data, updateField }: { data: ProjectData; updateField:
 // ─── Analytics structured form ───────────────────────────────────────────────
 
 interface BrandChampion { id: string; name: string; demographics: string; profession: string; needs: string; pains: string }
+
+interface SegmentRow {
+  id: string
+  dimension: string
+  client: string
+  values: string
+  valueCore: string
+  product: string
+  channels: string
+  subjects: string
+  valueProposition: string
+}
+
+const SEGMENT_COLS: { key: keyof SegmentRow; label: string; width: string }[] = [
+  { key: 'dimension',        label: 'Вимір',                 width: 'min-w-[130px]' },
+  { key: 'client',           label: 'Клієнт',                width: 'min-w-[150px]' },
+  { key: 'values',           label: 'Цінності',              width: 'min-w-[150px]' },
+  { key: 'valueCore',        label: 'Ядро цінності',         width: 'min-w-[150px]' },
+  { key: 'product',          label: 'Продукт (контент/дія)', width: 'min-w-[180px]' },
+  { key: 'channels',         label: 'Канали',                width: 'min-w-[130px]' },
+  { key: 'subjects',         label: 'Ключові субʼєкти',      width: 'min-w-[150px]' },
+  { key: 'valueProposition', label: 'Value Proposition',     width: 'min-w-[180px]' },
+]
+
 interface AnalyticsData {
   subscribers: string; audience: string; er: string
   comments: string; reposts: string; reach: string
   interests: string; income: string
   champions: BrandChampion[]
+  segmentation: SegmentRow[]
 }
 
 function parseAnalytics(raw: string): AnalyticsData {
-  const empty: AnalyticsData = { subscribers: '', audience: '', er: '', comments: '', reposts: '', reach: '', interests: '', income: '', champions: [] }
+  const empty: AnalyticsData = { subscribers: '', audience: '', er: '', comments: '', reposts: '', reach: '', interests: '', income: '', champions: [], segmentation: [] }
   if (!raw) return empty
   try {
     const p = JSON.parse(raw)
-    return { ...empty, ...p, champions: Array.isArray(p.champions) ? p.champions : [] }
+    return { ...empty, ...p, champions: Array.isArray(p.champions) ? p.champions : [], segmentation: Array.isArray(p.segmentation) ? p.segmentation : [] }
   } catch { return empty }
+}
+
+function SegmentationTable({ rows, onChange }: { rows: SegmentRow[]; onChange: (rows: SegmentRow[]) => void }) {
+  function add() {
+    onChange([...rows, { id: crypto.randomUUID(), dimension: '', client: '', values: '', valueCore: '', product: '', channels: '', subjects: '', valueProposition: '' }])
+  }
+  function remove(id: string) { onChange(rows.filter(r => r.id !== id)) }
+  function update(id: string, field: keyof SegmentRow, value: string) {
+    onChange(rows.map(r => r.id === id ? { ...r, [field]: value } : r))
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-300">Сегментація аудиторії</p>
+            <p className="text-xs text-slate-500">Опишіть кожен сегмент за 8 вимірами: від портрету клієнта до конкретного ціннісного посилу. Натисніть «Додати рядок», щоб розпочати.</p>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-slate-700/60">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-800/80">
+                  {SEGMENT_COLS.map(col => (
+                    <th key={col.key} className={`px-3 py-2 text-left font-semibold text-slate-400 tracking-wider whitespace-nowrap ${col.width}`}>
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-700/40">
+                  {SEGMENT_COLS.map(col => (
+                    <td key={col.key} className="px-3 py-2 text-slate-600 italic">—</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button
+            onClick={add}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Додати рядок сегментації
+          </button>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-700/60">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-slate-800/70 border-b border-slate-700/60">
+                {SEGMENT_COLS.map(col => (
+                  <th key={col.key} className={`px-3 py-2.5 text-left text-xs font-semibold text-slate-400 tracking-wider whitespace-nowrap ${col.width}`}>
+                    {col.label}
+                  </th>
+                ))}
+                <th className="w-8 px-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={row.id} className={`border-b border-slate-700/30 last:border-0 group ${i % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}>
+                  {SEGMENT_COLS.map(col => (
+                    <td key={col.key} className={`px-2 py-1 ${col.width}`}>
+                      <input
+                        type="text"
+                        value={row[col.key] as string}
+                        onChange={e => update(row.id, col.key, e.target.value)}
+                        placeholder="—"
+                        className="w-full min-w-0 bg-transparent border-b border-transparent focus:border-indigo-500/60 py-1 px-1 text-slate-200 placeholder-slate-700 text-xs outline-none transition-colors"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-2 py-1 w-8">
+                    <button
+                      onClick={() => remove(row.id)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rows.length > 0 && (
+        <button
+          onClick={add}
+          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-amber-500/40 rounded-xl text-slate-500 hover:text-amber-400 text-sm transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Додати рядок
+        </button>
+      )}
+    </div>
+  )
 }
 
 function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: (f: keyof ProjectData, v: string) => void }) {
@@ -1112,6 +1234,18 @@ function AnalyticsForm({ data, updateField }: { data: ProjectData; updateField: 
             <Plus size={14} /> Додати портрет клієнта
           </button>
         </div>
+      </div>
+
+      {/* Segmentation Table */}
+      <div className="border-t border-slate-700/50 pt-6">
+        <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs">◈</span>
+          Сегментація аудиторії
+        </h3>
+        <SegmentationTable
+          rows={a.segmentation}
+          onChange={(rows) => save({ ...a, segmentation: rows })}
+        />
       </div>
     </div>
   )
