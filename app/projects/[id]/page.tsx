@@ -989,90 +989,71 @@ function SegmentationTable({ rows, onChange }: { rows: SegmentRow[]; onChange: (
     onChange(rows.map(r => r.id === id ? { ...r, [field]: value } : r))
   }
 
+  const segField = (id: string, field: keyof SegmentRow, label: string, placeholder: string) => (
+    <div>
+      <label className="text-xs text-slate-500 tracking-wider mb-1 block">{label}</label>
+      <textarea
+        value={rows.find(r => r.id === id)?.[field] as string ?? ''}
+        onChange={e => update(id, field, e.target.value)}
+        placeholder={placeholder}
+        rows={2}
+        className="w-full bg-slate-800/60 border border-slate-700 focus:border-amber-500/50 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 text-sm transition-colors resize-none"
+      />
+    </div>
+  )
+
   return (
-    <div className="space-y-3">
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-4">
+    <div className="space-y-4">
+      {rows.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 p-5 space-y-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-300">Сегментація аудиторії</p>
-            <p className="text-xs text-slate-500">Опишіть кожен сегмент за 8 вимірами: від портрету клієнта до конкретного ціннісного посилу. Натисніть «Додати рядок», щоб розпочати.</p>
+            <p className="text-sm font-medium text-slate-300">Ще немає сегментів</p>
+            <p className="text-xs text-slate-500">Опишіть кожен сегмент аудиторії за 8 вимірами: від портрету клієнта до конкретного ціннісного посилу.</p>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-700/60">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-800/80">
-                  {SEGMENT_COLS.map(col => (
-                    <th key={col.key} className={`px-3 py-2 text-left font-semibold text-slate-400 tracking-wider whitespace-nowrap ${col.width}`}>
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-t border-slate-700/40">
-                  {SEGMENT_COLS.map(col => (
-                    <td key={col.key} className="px-3 py-2 text-slate-600 italic">—</td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+          <div className="grid grid-cols-4 gap-2 text-xs text-slate-600">
+            {SEGMENT_COLS.map(col => (
+              <div key={col.key} className="bg-slate-800/50 rounded px-2 py-1.5 text-center">{col.label}</div>
+            ))}
           </div>
           <button
             onClick={add}
             className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white text-sm transition-all flex items-center justify-center gap-2"
           >
-            <Plus size={14} /> Додати рядок сегментації
+            <Plus size={14} /> Додати перший сегмент
           </button>
         </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-700/60">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-slate-800/70 border-b border-slate-700/60">
-                {SEGMENT_COLS.map(col => (
-                  <th key={col.key} className={`px-3 py-2.5 text-left text-xs font-semibold text-slate-400 tracking-wider whitespace-nowrap ${col.width}`}>
-                    {col.label}
-                  </th>
-                ))}
-                <th className="w-8 px-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={row.id} className={`border-b border-slate-700/30 last:border-0 group ${i % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}>
-                  {SEGMENT_COLS.map(col => (
-                    <td key={col.key} className={`px-2 py-1 ${col.width}`}>
-                      <input
-                        type="text"
-                        value={row[col.key] as string}
-                        onChange={e => update(row.id, col.key, e.target.value)}
-                        placeholder="—"
-                        className="w-full min-w-0 bg-transparent border-b border-transparent focus:border-indigo-500/60 py-1 px-1 text-slate-200 placeholder-slate-700 text-xs outline-none transition-colors"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-2 py-1 w-8">
-                    <button
-                      onClick={() => remove(row.id)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all"
-                    >
-                      <X size={12} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      )}
+
+      {rows.map((row, i) => (
+        <div key={row.id} className="bg-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-amber-500/5">
+            <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+            <span className="text-xs font-semibold text-amber-300/80 uppercase tracking-wider flex-1">Сегмент {i + 1}</span>
+            <button onClick={() => remove(row.id)} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          {/* Fields grid */}
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {segField(row.id, 'dimension',        'Вимір',                 'Демографічний, психографічний...')}
+            {segField(row.id, 'client',           'Клієнт',                'Жінка 25–34, підприємець...')}
+            {segField(row.id, 'values',           'Цінності',              'Свобода, якість, зростання...')}
+            {segField(row.id, 'valueCore',        'Ядро цінності',         'Головна цінність сегменту...')}
+            {segField(row.id, 'product',          'Продукт (контент/дія)', 'Навчальний контент, акція...')}
+            {segField(row.id, 'channels',         'Канали',                'Instagram, email, TikTok...')}
+            {segField(row.id, 'subjects',         'Ключові субʼєкти',      'Лідер думок, спільнота...')}
+            {segField(row.id, 'valueProposition', 'Value Proposition',     'Що отримує клієнт...')}
+          </div>
         </div>
-      )}
-      {rows.length > 0 && (
-        <button
-          onClick={add}
-          className="w-full py-2.5 border border-dashed border-slate-700 hover:border-amber-500/40 rounded-xl text-slate-500 hover:text-amber-400 text-sm transition-all flex items-center justify-center gap-2"
-        >
-          <Plus size={14} /> Додати рядок
-        </button>
-      )}
+      ))}
+
+      <button
+        onClick={add}
+        className="w-full py-2.5 border border-dashed border-slate-700 hover:border-amber-500/40 rounded-xl text-slate-500 hover:text-amber-400 text-sm transition-all flex items-center justify-center gap-2"
+      >
+        <Plus size={14} /> Додати сегмент
+      </button>
     </div>
   )
 }
