@@ -35,7 +35,10 @@ export const DP: BrandProfile = {
 }
 
 export const DS: StrategyData = {
-  goals: [], rubrics: [], paid: '', organic: '', funnel: '',
+  goals: [],
+  audience: [],
+  rubrics: [],
+  channels: [],
 }
 
 export function exportBackup(): void {

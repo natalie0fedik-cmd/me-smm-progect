@@ -4,24 +4,19 @@ export interface BrandProfile {
   services: string
   geography: string
   prices: string
-
   // 2. Місія, візія, цінності
   mission: string
   vision: string
   values: string
-
   // 3. Архетипи, вороги, кити
   archetypes: string
   enemies: string
   pillars: string
-
   // 4. УЦП і ключовий меседж
   uvp: string
   keyMessage: string
-
   // 5. Tone of Voice
   toneOfVoice: string
-
   // 6. БІО профілю і хайлайтси
   bioProfile: string
   highlights: string
@@ -30,9 +25,16 @@ export interface BrandProfile {
   facebook: string
   youtube: string
   website: string
-
   // 7. Конкуренти (JSON: Competitor[])
   competitors: string
+}
+
+export interface Competitor {
+  id: string
+  name: string
+  strengths: string
+  weaknesses: string
+  diff: string
 }
 
 export interface Goal {
@@ -42,22 +44,39 @@ export interface Goal {
   current: number
   unit: string
   deadline: string
+  type: 'strategic' | 'tactical'
 }
 
-export interface Rubric {
+export interface AudienceDimension {
+  key: string
+  label: string
+  details: string
+  content: string
+  action: string
+}
+
+export interface ContentRubric {
   id: string
   name: string
+  description: string
+  format: string
+  frequency: string
+  goal: string
   color: string
-  pct: number
-  desc: string
+}
+
+export interface PromotionChannel {
+  id: string
+  name: string
+  actions: string
+  budget: string
 }
 
 export interface StrategyData {
   goals: Goal[]
-  rubrics: Rubric[]
-  paid: string
-  organic: string
-  funnel: string
+  audience: AudienceDimension[]
+  rubrics: ContentRubric[]
+  channels: PromotionChannel[]
 }
 
 export type CalEventType = 'task' | 'publication'
@@ -105,12 +124,4 @@ export interface Client {
   status: ClientStatus
   start: string
   notes: string
-}
-
-export interface Competitor {
-  id: string
-  name: string
-  strengths: string
-  weaknesses: string
-  diff: string
 }

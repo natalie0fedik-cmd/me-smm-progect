@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { User, Target, CalendarDays, BarChart2, Users, Download, Upload, Plus, X, Edit2, Trash2, ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react'
-import type { BrandProfile, StrategyData, Goal, Rubric, CalEvent, CalEventType, PostData, SubEntry, Client, ClientStatus, Competitor } from '@/types'
+import type { BrandProfile, StrategyData, Goal, AudienceDimension, ContentRubric, PromotionChannel, CalEvent, CalEventType, PostData, SubEntry, Client, ClientStatus, Competitor } from '@/types'
 import { K, ld, sv, DP, DS, exportBackup, importBackup } from '@/lib/storage'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -234,141 +234,226 @@ function ProfileSection() {
 // ─── Strategy Section ─────────────────────────────────────────────────────────
 const RUBRIC_COLORS = ['#C8D96F','#60935D','#F5F0E8','#4ade80','#facc15','#f97316','#818cf8','#f472b6']
 
+const AUDIENCE_DIMS_META = [
+  { key: 'who',         label: 'Хто це' },
+  { key: 'pains',       label: 'Болі та проблеми' },
+  { key: 'desires',     label: 'Бажання та мрії' },
+  { key: 'fears',       label: 'Страхи та сумніви' },
+  { key: 'objections',  label: 'Заперечення' },
+  { key: 'values',      label: 'Цінності' },
+  { key: 'triggers',    label: 'Тригери до дії' },
+  { key: 'behavior',    label: 'Поведінка онлайн' },
+  { key: 'touchpoints', label: 'Точки дотику' },
+]
+const DFLT_AUDIENCE: AudienceDimension[] = AUDIENCE_DIMS_META.map(d => ({ key: d.key, label: d.label, details: '', content: '', action: '' }))
+const DFLT_RUBRICS: ContentRubric[] = [
+  { id: 'r1', name: '', description: '', format: '', frequency: '', goal: '', color: '#C8D96F' },
+  { id: 'r2', name: '', description: '', format: '', frequency: '', goal: '', color: '#60935D' },
+  { id: 'r3', name: '', description: '', format: '', frequency: '', goal: '', color: '#F5F0E8' },
+]
+
 function StrategySection() {
-  const [s, setS] = useState<StrategyData>(() => ld(K.strat, DS))
+  const [s, setS] = useState<StrategyData>(() => {
+    const saved = ld(K.strat, DS)
+    return {
+      ...saved,
+      goals: (saved.goals ?? []).map(g => ({ ...g, type: (g as Goal).type ?? 'strategic' })),
+      audience: (saved.audience && saved.audience.length === 9) ? saved.audience : DFLT_AUDIENCE,
+      rubrics: (saved.rubrics && saved.rubrics.length === 3 && (saved.rubrics[0] as ContentRubric).description !== undefined)
+        ? saved.rubrics as ContentRubric[] : DFLT_RUBRICS,
+      channels: saved.channels ?? [],
+    }
+  })
   const save = (next: StrategyData) => { setS(next); sv(K.strat, next) }
 
-  const [goalModal, setGoalModal] = useState<Goal | null | 'new'>(null)
-  const [rubricModal, setRubricModal] = useState<Rubric | null | 'new'>(null)
+  const [goalModal, setGoalModal] = useState<'strategic' | 'tactical' | null>(null)
+  const gDraft = useRef<Goal>({ id: '', title: '', target: 100, current: 0, unit: '', deadline: '', type: 'strategic' })
 
-  const gDraft = useRef<Goal>({ id: '', title: '', target: 100, current: 0, unit: '', deadline: '' })
-  const rDraft = useRef<Rubric>({ id: '', name: '', color: C.accent, pct: 10, desc: '' })
-
-  function openGoal(g?: Goal) {
-    gDraft.current = g ? { ...g } : { id: '', title: '', target: 100, current: 0, unit: '', deadline: '' }
-    setGoalModal(g ?? 'new')
+  function openGoal(type: 'strategic' | 'tactical', g?: Goal) {
+    gDraft.current = g ? { ...g } : { id: '', title: '', target: 100, current: 0, unit: '', deadline: '', type }
+    setGoalModal(type)
   }
   function saveGoal() {
     const d = gDraft.current
     if (!d.title) return
-    const goals = d.id
-      ? s.goals.map(g => g.id === d.id ? d : g)
-      : [...s.goals, { ...d, id: crypto.randomUUID() }]
+    const goals = d.id ? s.goals.map(g => g.id === d.id ? d : g) : [...s.goals, { ...d, id: crypto.randomUUID() }]
     save({ ...s, goals }); setGoalModal(null)
   }
   function delGoal(id: string) { save({ ...s, goals: s.goals.filter(g => g.id !== id) }) }
+  function updGoalCurrent(id: string, v: number) { save({ ...s, goals: s.goals.map(g => g.id === id ? { ...g, current: v } : g) }) }
 
-  function openRubric(r?: Rubric) {
-    rDraft.current = r ? { ...r } : { id: '', name: '', color: C.accent, pct: 10, desc: '' }
-    setRubricModal(r ?? 'new')
+  function updAudience(key: string, field: keyof AudienceDimension, value: string) {
+    save({ ...s, audience: s.audience.map(a => a.key === key ? { ...a, [field]: value } : a) })
   }
-  function saveRubric() {
-    const d = rDraft.current
-    if (!d.name) return
-    const rubrics = d.id
-      ? s.rubrics.map(r => r.id === d.id ? d : r)
-      : [...s.rubrics, { ...d, id: crypto.randomUUID() }]
-    save({ ...s, rubrics }); setRubricModal(null)
+  function updRubric(id: string, field: keyof ContentRubric, value: string) {
+    save({ ...s, rubrics: s.rubrics.map(r => r.id === id ? { ...r, [field]: value } : r) })
   }
-  function delRubric(id: string) { save({ ...s, rubrics: s.rubrics.filter(r => r.id !== id) }) }
+  function addChannel() {
+    save({ ...s, channels: [...(s.channels ?? []), { id: crypto.randomUUID(), name: '', actions: '', budget: '' }] })
+  }
+  function updChannel(id: string, field: keyof PromotionChannel, value: string) {
+    save({ ...s, channels: s.channels.map(ch => ch.id === id ? { ...ch, [field]: value } : ch) })
+  }
+  function delChannel(id: string) { save({ ...s, channels: s.channels.filter(ch => ch.id !== id) }) }
+
+  const strategic = s.goals.filter(g => g.type === 'strategic')
+  const tactical = s.goals.filter(g => g.type === 'tactical')
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 40px' }}>
-      <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 32, color: C.text }}>Стратегія</h1>
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '40px 40px' }}>
+      <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 32, color: C.text }}>Стратегія і контент</h1>
 
-      {/* Goals */}
-      <Card style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <Hd>Цілі</Hd>
-          <Btn sm onClick={() => openGoal()}><Plus size={14} />Додати</Btn>
-        </div>
-        {s.goals.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Ще немає цілей. Додайте першу.</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {s.goals.map(g => {
-            const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0
-            return (
-              <div key={g.id} style={{ background: C.surf2, borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <span style={{ color: C.text, fontWeight: 600, fontSize: 15 }}>{g.title}</span>
-                    {g.deadline && <span style={{ color: C.muted, fontSize: 12, marginLeft: 10 }}>до {g.deadline}</span>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => openGoal(g)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={14} /></button>
-                    <button onClick={() => delGoal(g.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={14} /></button>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: C.accent, borderRadius: 3, transition: 'width 0.4s' }} />
-                  </div>
-                  <span style={{ color: C.accent, fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'right' }}>{pct}%</span>
-                  <span style={{ color: C.muted, fontSize: 12 }}>{g.current} / {g.target} {g.unit}</span>
-                </div>
-              </div>
-            )
-          })}
+      {/* 1. ЦІЛІ */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Цілі</Hd>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ color: C.accent, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Стратегічні</span>
+              <Btn sm onClick={() => openGoal('strategic')}><Plus size={13} />Додати</Btn>
+            </div>
+            {strategic.length === 0 && <p style={{ color: C.dim, fontSize: 13 }}>Немає стратегічних цілей</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {strategic.map(g => <GoalRow key={g.id} g={g} onEdit={() => openGoal('strategic', g)} onDel={() => delGoal(g.id)} onCurrent={v => updGoalCurrent(g.id, v)} />)}
+            </div>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ color: C.green, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Тактичні</span>
+              <Btn sm onClick={() => openGoal('tactical')}><Plus size={13} />Додати</Btn>
+            </div>
+            {tactical.length === 0 && <p style={{ color: C.dim, fontSize: 13 }}>Немає тактичних цілей</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {tactical.map(g => <GoalRow key={g.id} g={g} onEdit={() => openGoal('tactical', g)} onDel={() => delGoal(g.id)} onCurrent={v => updGoalCurrent(g.id, v)} />)}
+            </div>
+          </div>
         </div>
       </Card>
 
-      {/* Rubrics */}
-      <Card style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <Hd>Рубрики контенту</Hd>
-          <Btn sm onClick={() => openRubric()}><Plus size={14} />Додати</Btn>
-        </div>
-        {s.rubrics.length > 0 && (
-          <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 18 }}>
-            {s.rubrics.map(r => (
-              <div key={r.id} style={{ flex: r.pct, background: r.color, minWidth: 4 }} title={`${r.name}: ${r.pct}%`} />
+      {/* 2. ЦА — 9 вимірів */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>ЦА — 9 вимірів шляху клієнта</Hd>
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ minWidth: 660 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '155px 1fr 1fr 1fr', gap: 2, marginBottom: 2 }}>
+              <div style={{ background: C.surf2, borderRadius: '8px 0 0 0', padding: '8px 12px' }} />
+              {['Опис аудиторії', 'Контент', 'Дія'].map((h, i, arr) => (
+                <div key={h} style={{ background: C.surf2, padding: '8px 12px', borderRadius: i === arr.length - 1 ? '0 8px 0 0' : 0, color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</div>
+              ))}
+            </div>
+            {s.audience.map((a, i) => (
+              <div key={a.key} style={{ display: 'grid', gridTemplateColumns: '155px 1fr 1fr 1fr', gap: 2, marginBottom: 2 }}>
+                <div style={{ background: C.surf2, display: 'flex', alignItems: 'center', padding: '10px 12px', borderRadius: i === 8 ? '0 0 0 8px' : 0 }}>
+                  <span style={{ color: C.accent, fontWeight: 700, fontSize: 13, lineHeight: 1.35 }}>{a.label}</span>
+                </div>
+                {(['details', 'content', 'action'] as const).map((f, fi) => (
+                  <textarea key={f} value={a[f]} onChange={e => updAudience(a.key, f, e.target.value)} rows={3}
+                    placeholder={f === 'details' ? 'Хто/що...' : f === 'content' ? 'Який контент...' : 'Яка дія...'}
+                    style={{ ...inputStyle, minHeight: 80, background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: fi === 2 && i === 8 ? '0 0 8px 0' : 0, resize: 'none', fontSize: 13 }} />
+                ))}
+              </div>
             ))}
           </div>
-        )}
-        {s.rubrics.length === 0 && <p style={{ color: C.muted, fontSize: 14, marginBottom: 0 }}>Ще немає рубрик.</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {s.rubrics.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: r.color, flexShrink: 0 }} />
-              <span style={{ color: C.text, flex: 1, fontSize: 14 }}>{r.name}</span>
-              <span style={{ color: C.accent, fontWeight: 700, fontSize: 14, minWidth: 36 }}>{r.pct}%</span>
-              {r.desc && <span style={{ color: C.muted, fontSize: 12, flex: 2 }}>{r.desc}</span>}
-              <button onClick={() => openRubric(r)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={13} /></button>
-              <button onClick={() => delRubric(r.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={13} /></button>
+        </div>
+      </Card>
+
+      {/* 3. РУБРИКИ */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Рубрики контенту</Hd>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+          {s.rubrics.map((r, i) => (
+            <div key={r.id} style={{ background: C.surf2, borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ height: 5, background: r.color }} />
+              <div style={{ padding: '14px 16px' }}>
+                <input value={r.name} onChange={e => updRubric(r.id, 'name', e.target.value)} placeholder={`Рубрика ${i + 1}`}
+                  style={{ ...inputStyle, fontWeight: 700, fontSize: 15, marginBottom: 12, border: 'none', background: 'transparent', padding: '2px 0' }} />
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', color: C.muted, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Колір</label>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {RUBRIC_COLORS.map(c => (
+                      <button key={c} onClick={() => updRubric(r.id, 'color', c)} style={{ width: 20, height: 20, borderRadius: 4, background: c, border: r.color === c ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer' }} />
+                    ))}
+                  </div>
+                </div>
+                <Field label="Опис" value={r.description} onChange={v => updRubric(r.id, 'description', v)} multiline rows={3} placeholder="Про що ця рубрика?" />
+                <Field label="Формат" value={r.format} onChange={v => updRubric(r.id, 'format', v)} placeholder="Reels, Пост, Сторіс…" />
+                <Field label="Частота" value={r.frequency} onChange={v => updRubric(r.id, 'frequency', v)} placeholder="2× на тиждень" />
+                <Field label="Мета" value={r.goal} onChange={v => updRubric(r.id, 'goal', v)} placeholder="Залучити, продати…" />
+              </div>
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Promotion */}
+      {/* 4. ПРОСУВАННЯ */}
       <Card>
-        <Hd>Стратегія просування</Hd>
-        <Field label="Платні канали" value={s.paid} onChange={v => save({ ...s, paid: v })} multiline rows={3} placeholder="Таргет, реклама, колаборації…" />
-        <Field label="Органічні канали" value={s.organic} onChange={v => save({ ...s, organic: v })} multiline rows={3} placeholder="SEO, reels, UGC, хештеги…" />
-        <Field label="Воронка продажів" value={s.funnel} onChange={v => save({ ...s, funnel: v })} multiline rows={3} placeholder="Шлях від підписника до клієнта" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Просування</Hd>
+          <Btn sm onClick={addChannel}><Plus size={14} />Канал</Btn>
+        </div>
+        {(s.channels ?? []).length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Додайте канали просування.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(s.channels ?? []).map(ch => (
+            <div key={ch.id} style={{ background: C.surf2, borderRadius: 10, padding: '16px 18px' }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 4 }}>
+                <div style={{ flex: 1 }}>
+                  <Field label="Канал" value={ch.name} onChange={v => updChannel(ch.id, 'name', v)} placeholder="Instagram, TikTok, Email, Telegram…" />
+                </div>
+                <div style={{ width: 160 }}>
+                  <Field label="Бюджет / Ресурс" value={ch.budget} onChange={v => updChannel(ch.id, 'budget', v)} placeholder="5 000 грн/міс" />
+                </div>
+                <button onClick={() => delChannel(ch.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', marginBottom: 18 }}><Trash2 size={15} /></button>
+              </div>
+              <Field label="Дії та тактики" value={ch.actions} onChange={v => updChannel(ch.id, 'actions', v)} multiline rows={3} placeholder="Що саме робимо на цьому каналі?" />
+            </div>
+          ))}
+        </div>
       </Card>
 
       {/* Goal modal */}
-      <Modal open={!!goalModal} onClose={() => setGoalModal(null)} title={gDraft.current.id ? 'Редагувати ціль' : 'Нова ціль'}>
-        <GoalForm draft={gDraft.current} onChange={d => { gDraft.current = d }} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-          <Btn variant="ghost" onClick={() => setGoalModal(null)}>Скасувати</Btn>
-          <Btn onClick={saveGoal}>Зберегти</Btn>
-        </div>
-      </Modal>
-
-      {/* Rubric modal */}
-      <Modal open={!!rubricModal} onClose={() => setRubricModal(null)} title={rDraft.current.id ? 'Редагувати рубрику' : 'Нова рубрика'}>
-        <RubricForm draft={rDraft.current} onChange={d => { rDraft.current = d }} colors={RUBRIC_COLORS} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-          <Btn variant="ghost" onClick={() => setRubricModal(null)}>Скасувати</Btn>
-          <Btn onClick={saveRubric}>Зберегти</Btn>
+      <Modal open={!!goalModal} onClose={() => setGoalModal(null)} title={gDraft.current.id ? 'Редагувати ціль' : goalModal === 'strategic' ? 'Нова стратегічна ціль' : 'Нова тактична ціль'}>
+        <StratGoalForm draft={gDraft.current} onChange={d => { gDraft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+          <div>{gDraft.current.id && <Btn variant="danger" sm onClick={() => { delGoal(gDraft.current.id); setGoalModal(null) }}><Trash2 size={13} />Видалити</Btn>}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setGoalModal(null)}>Скасувати</Btn>
+            <Btn onClick={saveGoal}>Зберегти</Btn>
+          </div>
         </div>
       </Modal>
     </div>
   )
 }
 
-function GoalForm({ draft, onChange }: { draft: Goal; onChange: (d: Goal) => void }) {
+function GoalRow({ g, onEdit, onDel, onCurrent }: { g: Goal; onEdit: () => void; onDel: () => void; onCurrent: (v: number) => void }) {
+  const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0
+  return (
+    <div style={{ background: C.bg, borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ color: C.text, fontWeight: 600, fontSize: 14 }}>{g.title || '—'}</span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onEdit} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={13} /></button>
+          <button onClick={onDel} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={13} /></button>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ flex: 1, height: 5, background: 'rgba(0,0,0,0.3)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: C.accent, borderRadius: 3, transition: 'width 0.3s' }} />
+        </div>
+        <span style={{ color: C.accent, fontSize: 12, fontWeight: 700, minWidth: 34 }}>{pct}%</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ color: C.muted, fontSize: 12 }}>Факт:</span>
+        <input type="number" value={g.current} onChange={e => onCurrent(Number(e.target.value) || 0)}
+          style={{ ...inputStyle, width: 80, height: 30, padding: '4px 8px', fontSize: 12 }} />
+        <span style={{ color: C.muted, fontSize: 12 }}>/ {g.target} {g.unit}</span>
+        {g.deadline && <span style={{ color: C.dim, fontSize: 11, marginLeft: 'auto' }}>до {g.deadline}</span>}
+      </div>
+    </div>
+  )
+}
+
+function StratGoalForm({ draft, onChange }: { draft: Goal; onChange: (d: Goal) => void }) {
   const [d, setD] = useState(draft)
   const u = (f: keyof Goal, v: string | number) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
   return (
@@ -380,26 +465,6 @@ function GoalForm({ draft, onChange }: { draft: Goal; onChange: (d: Goal) => voi
         <Field label="Одиниця" value={d.unit} onChange={v => u('unit', v)} placeholder="підп., грн…" />
       </div>
       <Field label="Дедлайн" value={d.deadline} onChange={v => u('deadline', v)} placeholder="2025-12-31" />
-    </div>
-  )
-}
-
-function RubricForm({ draft, onChange, colors }: { draft: Rubric; onChange: (d: Rubric) => void; colors: string[] }) {
-  const [d, setD] = useState(draft)
-  const u = (f: keyof Rubric, v: string | number) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
-  return (
-    <div>
-      <Field label="Назва рубрики" value={d.name} onChange={v => u('name', v)} placeholder="Експертний, розважальний…" />
-      <Field label="Відсоток (%" value={String(d.pct)} onChange={v => u('pct', Number(v) || 0)} />
-      <Field label="Опис" value={d.desc} onChange={v => u('desc', v)} placeholder="Про що ця рубрика?" />
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Колір</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {colors.map(c => (
-            <button key={c} onClick={() => u('color', c)} style={{ width: 28, height: 28, borderRadius: 6, background: c, border: d.color === c ? `3px solid ${C.text}` : '3px solid transparent', cursor: 'pointer' }} />
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
