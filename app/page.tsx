@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, Edit3, type LucideIcon } from 'lucide-react'
+import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, Edit3, Download, Upload, type LucideIcon } from 'lucide-react'
 import { Project, ProjectData, CalendarEvent, CalendarEventType, PostMetric } from '@/types'
-import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents, getPostMetrics, savePostMetric, deletePostMetric } from '@/lib/storage'
+import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents, getPostMetrics, savePostMetric, deletePostMetric, exportAllData, importAllData } from '@/lib/storage'
 
 // ─── Analytics types & helpers ───────────────────────────────────────────────
 
@@ -1328,7 +1328,7 @@ function NavBtn({label,Icon,active,onClick}:{label:string;Icon:LucideIcon;active
   )
 }
 
-function Sidebar({active,onNav,projects}:{active:NavView;onNav:(v:NavView)=>void;projects:Project[]}) {
+function Sidebar({active,onNav,projects,onImport}:{active:NavView;onNav:(v:NavView)=>void;projects:Project[];onImport:()=>void}) {
   const router = useRouter()
   const [projOpen, setProjOpen] = useState(true)
 
@@ -1430,8 +1430,11 @@ function Sidebar({active,onNav,projects}:{active:NavView;onNav:(v:NavView)=>void
       </nav>
 
       <div style={{padding:'12px 8px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-        <button style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:4}}>
-          <Settings size={17}/>Налаштування
+        <button onClick={exportAllData} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:2}}>
+          <Download size={17}/>Зберегти дані
+        </button>
+        <button onClick={onImport} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:4}}>
+          <Upload size={17}/>Відновити дані
         </button>
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
           <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>НФ</div>
@@ -1851,16 +1854,46 @@ const VALID_VIEWS: NavView[] = ['dashboard','projects','calendar','analytics']
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [nav, setNav] = useState<NavView>('dashboard')
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     setProjects(getProjects())
     const saved = localStorage.getItem(NAV_STORAGE_KEY) as NavView | null
     if (saved && VALID_VIEWS.includes(saved)) setNav(saved)
   }, [])
+
   function refresh(){setProjects(getProjects())}
   function navigate(v: NavView) { setNav(v); localStorage.setItem(NAV_STORAGE_KEY, v) }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const result = importAllData(text)
+      if (result.ok) {
+        refresh()
+        setImportMsg('Дані відновлено успішно!')
+      } else {
+        setImportMsg(result.error ?? 'Помилка')
+      }
+      setTimeout(() => setImportMsg(null), 3000)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden',backgroundColor:'#070d1a'}}>
-      <Sidebar active={nav} onNav={navigate} projects={projects}/>
+      <input ref={importRef} type="file" accept=".json" style={{display:'none'}} onChange={handleImportFile}/>
+      {importMsg && (
+        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:9999,backgroundColor:'#1e293b',color:'#e2e8f0',padding:'12px 24px',borderRadius:12,fontSize:14,boxShadow:'0 4px 24px rgba(0,0,0,0.5)',border:'1px solid rgba(255,255,255,0.1)'}}>
+          {importMsg}
+        </div>
+      )}
+      <Sidebar active={nav} onNav={navigate} projects={projects} onImport={() => importRef.current?.click()}/>
       <main style={{flex:1,overflowY:'auto',backgroundColor:'#070d1a'}}>
         {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={navigate}/>}
         {nav==='projects'&&<ProjectsView projects={projects} onRefresh={refresh}/>}

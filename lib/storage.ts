@@ -103,3 +103,33 @@ export function getProgress(data: ProjectData): number {
   const filled = values.filter((v) => typeof v === 'string' && v.trim().length > 0).length
   return Math.round((filled / values.length) * 100)
 }
+
+export function exportAllData(): void {
+  const backup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    projects: localStorage.getItem(STORAGE_KEY),
+    calendar: localStorage.getItem(CALENDAR_KEY),
+    postMetrics: localStorage.getItem(POST_METRICS_KEY),
+  }
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `smm-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function importAllData(json: string): { ok: boolean; error?: string } {
+  try {
+    const backup = JSON.parse(json)
+    if (!backup || typeof backup !== 'object') return { ok: false, error: 'Невірний формат файлу' }
+    if (backup.projects) localStorage.setItem(STORAGE_KEY, backup.projects)
+    if (backup.calendar) localStorage.setItem(CALENDAR_KEY, backup.calendar)
+    if (backup.postMetrics) localStorage.setItem(POST_METRICS_KEY, backup.postMetrics)
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Не вдалося прочитати файл' }
+  }
+}
