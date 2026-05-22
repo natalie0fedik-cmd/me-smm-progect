@@ -1,1904 +1,988 @@
 'use client'
-
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Trash2, FolderOpen, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, X, Clock, BarChart2, Check, LayoutDashboard, Settings, Zap, CalendarDays, Lightbulb, Edit3, Download, Upload, type LucideIcon } from 'lucide-react'
-import { Project, ProjectData, CalendarEvent, CalendarEventType, PostMetric } from '@/types'
-import { getProjects, createProject, deleteProject, getProgress, saveProject, getCalendarEvents, saveCalendarEvents, getPostMetrics, savePostMetric, deletePostMetric, exportAllData, importAllData } from '@/lib/storage'
+import { User, Target, CalendarDays, BarChart2, Users, Download, Upload, Plus, X, Edit2, Trash2, ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react'
+import type { BrandProfile, StrategyData, Goal, Rubric, CalEvent, CalEventType, PostData, SubEntry, Client, ClientStatus } from '@/types'
+import { K, ld, sv, DP, DS, exportBackup, importBackup } from '@/lib/storage'
 
-// ─── Analytics types & helpers ───────────────────────────────────────────────
-
-interface KpiM { id: string; name: string; target: string; current: string; period: string }
-interface MonthlyRep { id: string; month: string; actuals: Record<string, string>; notes: string }
-
-function parseKM(raw: string): KpiM[] {
-  if (!raw) return []
-  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
-}
-function parseMR(raw: string): MonthlyRep[] {
-  if (!raw) return []
-  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+// ─── Colors ───────────────────────────────────────────────────────────────────
+const C = {
+  bg: '#0A1E14', surf: '#14342B', surf2: '#1A3D30',
+  border: 'rgba(96,147,93,0.22)', accent: '#C8D96F',
+  green: '#60935D', text: '#F5F0E8',
+  muted: 'rgba(245,240,232,0.5)', dim: 'rgba(245,240,232,0.18)',
 }
 
-function exportCsvA(kpis: KpiM[], reports: MonthlyRep[], name: string) {
-  const headers = ['Місяць', ...kpis.flatMap(k => [`${k.name} (план)`, `${k.name} (факт)`]), 'Нотатки']
-  const rows = [...reports].sort((a, b) => a.month.localeCompare(b.month)).map(r => [
-    r.month, ...kpis.flatMap(k => [k.target, r.actuals[k.name] ?? '']), r.notes,
-  ])
-  const csv = [headers, ...rows].map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = `${name.replace(/\s+/g, '_')}_analytics.csv`; a.click()
-  URL.revokeObjectURL(url)
+type Section = 'profile' | 'strategy' | 'calendar' | 'analytics' | 'clients'
+
+// ─── Shared UI ────────────────────────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  width: '100%', backgroundColor: 'rgba(0,0,0,0.28)',
+  border: `1px solid ${C.border}`, borderRadius: 8,
+  color: C.text, fontFamily: 'var(--font-body)', fontSize: 14,
+  padding: '10px 12px', boxSizing: 'border-box',
 }
 
-const KPI_QUICK: KpiM[] = [
-  { id: '', name: 'Підписники',          target: '+500 / місяць',   current: '', period: 'Щомісяця' },
-  { id: '', name: 'Охоплення',           target: '50 000 / місяць', current: '', period: 'Щомісяця' },
-  { id: '', name: 'ER (залученість)',     target: 'від 3%',          current: '', period: 'По кожному посту' },
-  { id: '', name: 'Трафік на сайт',      target: '1 000 кліків',    current: '', period: 'Щомісяця' },
-  { id: '', name: 'Конверсія в продажі', target: 'від 2%',          current: '', period: 'Щомісяця' },
-  { id: '', name: 'Вартість підписника', target: 'до 30 грн',       current: '', period: 'На кампанію' },
-]
-
-const MONTHS_UK_LONG = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
-function fmtMonthLong(m: string) {
-  const [y, mo] = m.split('-')
-  return `${MONTHS_UK_LONG[parseInt(mo) - 1]} ${y}`
-}
-
-// ─── Inline KPI panel ────────────────────────────────────────────────────────
-
-function InlineKpiPanel({ project, onSave }: { project: Project; onSave: (kpis: KpiM[]) => void }) {
-  const list = parseKM(project.data.kpi)
-  const quickNames = new Set(KPI_QUICK.map(k => k.name))
-  const customList = list.filter(k => !quickNames.has(k.name))
-
-  function save(next: KpiM[]) { onSave(next) }
-
-  function toggleQuick(ex: KpiM) {
-    const idx = list.findIndex(k => k.name === ex.name)
-    if (idx >= 0) save(list.filter((_, i) => i !== idx))
-    else save([...list, { ...ex, id: crypto.randomUUID() }])
-  }
-  function updQuick(name: string, field: 'target' | 'period', value: string) {
-    save(list.map(k => k.name === name ? { ...k, [field]: value } : k))
-  }
-  function addCustom() { save([...list, { id: crypto.randomUUID(), name: '', target: '', current: '', period: '' }]) }
-  function updCustom(id: string, field: keyof KpiM, value: string) {
-    save(list.map(k => k.id === id ? { ...k, [field]: value } : k))
-  }
-  function removeCustom(id: string) { save(list.filter(k => k.id !== id)) }
-
+function Field({ label, value, onChange, multiline, rows = 4, placeholder = '' }: {
+  label: string; value: string; onChange: (v: string) => void
+  multiline?: boolean; rows?: number; placeholder?: string
+}) {
   return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Оберіть KPI для відстеження</p>
-        <div className="space-y-2">
-          {KPI_QUICK.map(ex => {
-            const saved = list.find(k => k.name === ex.name)
-            const isOn = !!saved
-            return (
-              <div key={ex.name}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all"
-                style={isOn
-                  ? { backgroundColor: 'rgba(99,102,241,0.08)', borderColor: 'rgba(99,102,241,0.4)' }
-                  : { backgroundColor: 'rgba(15,23,42,0.4)', borderColor: 'rgba(51,65,85,0.5)' }}>
-                <button
-                  onClick={() => toggleQuick(ex)}
-                  className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all border"
-                  style={isOn
-                    ? { backgroundColor: '#6366f1', borderColor: '#6366f1' }
-                    : { backgroundColor: 'transparent', borderColor: '#475569' }}>
-                  {isOn && <Check size={11} color="#ffffff" />}
-                </button>
-                <span
-                  className="flex-1 text-sm font-medium cursor-pointer select-none transition-colors"
-                  onClick={() => toggleQuick(ex)}
-                  style={{ color: isOn ? '#e2e8f0' : '#64748b' }}>
-                  {ex.name}
-                </span>
-                {isOn ? (
-                  <>
-                    <input
-                      type="text" value={saved!.target}
-                      onChange={e => updQuick(ex.name, 'target', e.target.value)}
-                      placeholder="Ціль" onClick={e => e.stopPropagation()}
-                      className="bg-slate-800 border border-indigo-500/30 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none text-center w-32"
-                    />
-                    <input
-                      type="text" value={saved!.period}
-                      onChange={e => updQuick(ex.name, 'period', e.target.value)}
-                      placeholder="Período" onClick={e => e.stopPropagation()}
-                      className="bg-slate-800 border border-slate-700 focus:border-slate-500 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none text-center w-28"
-                    />
-                  </>
-                ) : (
-                  <span className="text-xs text-slate-600">{ex.target}</span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {customList.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Власні KPI</p>
-          <div className="space-y-2">
-            {customList.map(k => (
-              <div key={k.id} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/60 rounded-xl px-3 py-2.5">
-                <input type="text" value={k.name} onChange={e => updCustom(k.id, 'name', e.target.value)} placeholder="Назва метрики" className="bg-transparent text-slate-100 text-sm placeholder-slate-600 outline-none flex-1 min-w-0" />
-                <input type="text" value={k.target} onChange={e => updCustom(k.id, 'target', e.target.value)} placeholder="Ціль" className="bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-indigo-300 placeholder-slate-600 outline-none text-center w-28" />
-                <input type="text" value={k.period} onChange={e => updCustom(k.id, 'period', e.target.value)} placeholder="Щомісяця" className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-400 placeholder-slate-600 outline-none text-center w-24" />
-                <button onClick={() => removeCustom(k.id)} className="text-slate-600 hover:text-red-400 transition-colors"><X size={14} /></button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <button onClick={addCustom} className="w-full py-2.5 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl text-slate-500 hover:text-indigo-400 text-sm transition-all flex items-center justify-center gap-2">
-        <Plus size={14} /> Власний KPI
-      </button>
+    <div style={{ marginBottom: 18 }}>
+      <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{label}</label>
+      {multiline
+        ? <textarea rows={rows} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
+        : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ ...inputStyle, height: 40 }} />}
     </div>
   )
 }
 
-// ─── Inline Monthly Reports panel ─────────────────────────────────────────────
-
-function parseDelta(fact: string, plan: string): { value: string; positive: boolean } | null {
-  const f = parseFloat(fact.replace(/[^\d.]/g, ''))
-  const p = parseFloat(plan.replace(/[^\d.]/g, ''))
-  if (isNaN(f) || isNaN(p) || p === 0) return null
-  const pct = ((f - p) / Math.abs(p)) * 100
-  return { value: `${pct >= 0 ? '+' : ''}${Math.round(pct)}%`, positive: pct >= 0 }
-}
-
-function aggregateMonthPosts(projectId: string, month: string, kpiNames: string[]): { actuals: Record<string,string>; totals: Record<string,number>; count: number } {
-  const posts = getPostMetrics(projectId).filter(p => p.date.startsWith(month))
-  if (posts.length === 0) return { actuals: {}, totals: {}, count: 0 }
-
-  const totals: Record<string, number> = {}
-  for (const post of posts) {
-    for (const [key, val] of Object.entries(post.metrics)) {
-      if (key === 'ER%' || key === 'ERR%') continue
-      const n = parseFloat(val)
-      if (!isNaN(n)) totals[key] = (totals[key] ?? 0) + n
-    }
+function Btn({ children, onClick, variant = 'primary', sm, disabled }: {
+  children: React.ReactNode; onClick?: () => void
+  variant?: 'primary' | 'ghost' | 'danger'; sm?: boolean; disabled?: boolean
+}) {
+  const vs = {
+    primary: { background: C.accent, color: C.surf, border: 'none' },
+    ghost: { background: 'transparent', color: C.text, border: `1px solid ${C.border}` },
+    danger: { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' },
   }
-
-  // ER%/ERR% — recalculate from aggregated totals per platform formula
-  const platformsInPosts = Array.from(new Set(posts.map(p => p.platform)))
-  for (const platform of platformsInPosts) {
-    const f = ER_FORMULA[platform]
-    if (!f) continue
-    const num = f.num.reduce((s, k) => s + (totals[k] ?? 0), 0)
-    const den = totals[f.den] ?? 0
-    if (den > 0) totals[f.label] = parseFloat(((num / den) * 100).toFixed(2))
-  }
-
-  const actuals: Record<string,string> = {}
-  for (const name of kpiNames) {
-    const v = totals[name]
-    if (v !== undefined) actuals[name] = name.endsWith('%') ? String(v) : String(Math.round(v))
-  }
-
-  return { actuals, totals, count: posts.length }
-}
-
-function InlineReportsPanel({ project, onSave }: { project: Project; onSave: (reports: MonthlyRep[]) => void }) {
-  const kpis = parseKM(project.data.kpi)
-  const reports = parseMR(project.data.monthlyReports)
-
-  const now = new Date()
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const [draftMonth, setDraftMonth] = useState(thisMonth)
-  const [postTotals, setPostTotals] = useState<Record<string,number>>({})
-  const [postActuals, setPostActuals] = useState<Record<string,string>>({})
-  const [manualActuals, setManualActuals] = useState<Record<string,string>>({})
-  const [postCount, setPostCount] = useState(0)
-  const [draftNotes, setDraftNotes] = useState('')
-  const [savedAt, setSavedAt] = useState<string | null>(null)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const currentMonth = useRef(thisMonth)
-  const postActualsRef = useRef<Record<string,string>>({})
-
-  function save(next: MonthlyRep[]) { onSave(next) }
-  function removeReport(id: string) { save(reports.filter(r => r.id !== id)) }
-
-  function scheduleSave(allActuals: Record<string,string>, notes: string, month: string) {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      if (!Object.keys(allActuals).length && !notes.trim()) return
-      const existing = reports.find(r => r.month === month)
-      if (existing) {
-        save(reports.map(r => r.month === month ? { ...r, actuals: allActuals, notes } : r))
-      } else {
-        save([{ id: crypto.randomUUID(), month, actuals: allActuals, notes }, ...reports])
-      }
-      setSavedAt(new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }))
-    }, 400)
-  }
-
-  function updateManual(name: string, val: string, curPostActuals: Record<string,string>, notes: string, month: string) {
-    const next = { ...manualActuals, [name]: val }
-    setManualActuals(next)
-    scheduleSave({ ...curPostActuals, ...next }, notes, month)
-  }
-
-  function loadMonth(month: string) {
-    currentMonth.current = month
-    setDraftMonth(month)
-    const r = reports.find(rep => rep.month === month)
-    const { actuals, totals, count } = aggregateMonthPosts(project.id, month, kpis.map(k => k.name))
-    setPostTotals(totals)
-    setPostActuals(actuals)
-    postActualsRef.current = actuals
-    setPostCount(count)
-    // manual actuals = saved values for KPIs not covered by posts
-    const savedManual: Record<string,string> = {}
-    if (r) {
-      for (const [k, v] of Object.entries(r.actuals)) {
-        if (!actuals[k]) savedManual[k] = v
-      }
-    }
-    setManualActuals(savedManual)
-    const notes = r ? r.notes : ''
-    setDraftNotes(notes)
-    scheduleSave({ ...actuals, ...savedManual }, notes, month)
-  }
-
-  useEffect(() => { loadMonth(draftMonth) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (kpis.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center space-y-2">
-        <p className="text-2xl">📊</p>
-        <p className="text-sm font-medium text-slate-300">Спочатку заповніть KPI (план)</p>
-        <p className="text-xs text-slate-500">Перейдіть на вкладку «KPI (план)» і виберіть показники</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Form */}
-      <div className="bg-slate-900/50 border border-slate-700/60 rounded-2xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 bg-slate-800/60 border-b border-slate-700/60 flex-wrap">
-          <span className="text-sm font-semibold text-white">Звіт за місяць</span>
-          <input
-            type="month" value={draftMonth}
-            onChange={e => loadMonth(e.target.value)}
-            className="bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors"
-          />
-          <span className="ml-auto text-xs text-slate-500">
-            {savedAt
-              ? <span className="text-emerald-400/80">● Збережено {savedAt}</span>
-              : <span className="text-slate-600">Зберігається автоматично</span>
-            }
-          </span>
-        </div>
-
-        <div className="p-5 space-y-5">
-
-          {/* KPI plan vs fact — auto from posts, or manual input if no post data */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_140px_140px_70px] gap-3 text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">
-              <span>KPI</span>
-              <span className="text-center">План</span>
-              <span className="text-center">Факт</span>
-              <span className="text-center">Δ</span>
-            </div>
-            {kpis.map(kpi => {
-              const fromPost = postActuals[kpi.name] ?? ''
-              const manual = manualActuals[kpi.name] ?? ''
-              const fact = fromPost || manual
-              const delta = parseDelta(fact, kpi.target)
-              return (
-                <div key={kpi.id} className="grid grid-cols-[1fr_140px_140px_70px] gap-3 items-center rounded-xl px-3 py-2.5 border"
-                  style={{ backgroundColor: 'rgba(15,23,42,0.5)', borderColor: 'rgba(51,65,85,0.5)' }}>
-                  <span className="text-sm text-slate-300">{kpi.name}</span>
-                  <span className="text-sm text-slate-500 text-center">{kpi.target}</span>
-                  {fromPost ? (
-                    <span className="text-sm text-center font-semibold py-1.5" style={{ color: '#6ee7b7' }}>
-                      {fromPost}
-                    </span>
-                  ) : (
-                    <input
-                      type="text" value={manual}
-                      onChange={e => updateManual(kpi.name, e.target.value, postActualsRef.current, draftNotes, currentMonth.current)}
-                      placeholder="Вручну"
-                      className="border rounded-lg px-2 py-1.5 text-sm text-center outline-none transition-colors placeholder-slate-700 bg-slate-800/80"
-                      style={{ borderColor: manual ? 'rgba(99,102,241,0.5)' : '#334155', color: manual ? '#a5b4fc' : '#94a3b8' }}
-                    />
-                  )}
-                  <span className="text-sm text-center font-semibold"
-                    style={{ color: delta === null ? '#475569' : delta.positive ? '#6ee7b7' : '#f87171' }}>
-                    {delta ? delta.value : '—'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* All raw post metrics for the month */}
-          {postCount > 0 && Object.keys(postTotals).length > 0 && (
-            <div className="rounded-xl border border-slate-700/40 bg-slate-900/30 p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Усі метрики з постів</span>
-                <span className="text-xs text-slate-600 bg-slate-800 rounded-full px-2 py-0.5">{postCount} {postCount === 1 ? 'пост' : postCount < 5 ? 'пости' : 'постів'}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(postTotals).map(([key, val]) => (
-                  <div key={key} className="flex items-center justify-between gap-2 bg-slate-900/60 rounded-lg px-3 py-2">
-                    <span className="text-xs text-slate-500 truncate">{key}</span>
-                    <span className="text-sm font-semibold text-slate-200 whitespace-nowrap">
-                      {key.endsWith('%') ? val.toFixed(2) + '%' : Math.round(val).toLocaleString('uk-UA')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {postCount === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-700/50 p-5 text-center space-y-1">
-              <p className="text-sm text-slate-500">Немає постів за цей місяць</p>
-              <p className="text-xs text-slate-600">Додайте пости з метриками — факти з&apos;являться автоматично</p>
-            </div>
-          )}
-
-          <textarea
-            value={draftNotes} onChange={e => {
-              setDraftNotes(e.target.value)
-              scheduleSave({ ...postActualsRef.current, ...manualActuals }, e.target.value, currentMonth.current)
-            }}
-            placeholder="Нотатки за місяць: що спрацювало, що ні..."
-            rows={2}
-            className="w-full bg-slate-800/50 border border-slate-700 focus:border-slate-500 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 outline-none resize-none transition-colors"
-          />
-
-        </div>
-      </div>
-
-      {/* History */}
-      {reports.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Попередні звіти</p>
-            <button onClick={() => exportCsvA(kpis, [...reports].reverse(), project.name)}
-              className="text-xs text-slate-500 hover:text-white transition-colors">⬇ CSV</button>
-          </div>
-          {[...reports].sort((a, b) => b.month.localeCompare(a.month)).map(report => (
-            <div key={report.id} className="bg-slate-900/40 border border-slate-700/50 rounded-xl overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/40">
-                <span className="text-sm font-bold text-slate-300">{fmtMonthLong(report.month)}</span>
-                <span className="text-xs text-slate-600 flex-1">
-                  {kpis.filter(k => report.actuals[k.name]?.trim()).length}/{kpis.length} заповнено
-                </span>
-                <button onClick={() => loadMonth(report.month)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Редагувати</button>
-                <button onClick={() => removeReport(report.id)} className="text-slate-600 hover:text-red-400 transition-colors ml-2"><X size={13} /></button>
-              </div>
-              <div className="px-4 py-3 space-y-1.5">
-                {kpis.map(kpi => {
-                  const fact = report.actuals[kpi.name] ?? ''
-                  const delta = parseDelta(fact, kpi.target)
-                  return (
-                    <div key={kpi.id} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-500 flex-1 min-w-0 truncate">{kpi.name}</span>
-                      <span className="text-slate-600 text-right whitespace-nowrap">{kpi.target}</span>
-                      <span className="text-slate-700 mx-1">→</span>
-                      <span className="font-medium w-20 text-right whitespace-nowrap" style={{ color: fact ? '#6ee7b7' : '#475569' }}>{fact || '—'}</span>
-                      {delta && <span className="w-10 text-right font-semibold" style={{ color: delta.positive ? '#6ee7b7' : '#f87171' }}>{delta.value}</span>}
-                    </div>
-                  )
-                })}
-                {report.notes && <p className="text-xs text-slate-600 pt-1.5 border-t border-slate-700/40 mt-1">{report.notes}</p>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Post metrics constants ───────────────────────────────────────────────────
-
-const POST_PLATFORM_METRICS: Record<string, string[]> = {
-  Instagram:  ['Охоплення','Покази','Лайки','Коментарі','Репости','Збережень','Перегляди'],
-  TikTok:     ['Перегляди','Лайки','Коментарі','Репости','Збережень','Час перегляду (сек)'],
-  Facebook:   ['Охоплення','Покази','Лайки','Коментарі','Репости'],
-  LinkedIn:   ['Покази','Кліки','Лайки','Коментарі','CTR%'],
-  YouTube:    ['Перегляди','Лайки','Коментарі','Підписники+','CTR%','Час перегляду (год)'],
-  Telegram:   ['Перегляди','Репости','Реакції'],
-  'Twitter/X':['Покази','Лайки','Репости','Цитати','Кліки'],
-  Pinterest:  ['Покази','Кліки','Збережень'],
-  Threads:    ['Лайки','Репости','Відповіді','Цитати'],
-}
-
-// ER% numerator fields and denominator per platform
-const ER_FORMULA: Record<string, { num: string[]; den: string; label: string }> = {
-  Instagram:   { num: ['Лайки','Коментарі','Репости','Збережень'], den: 'Охоплення',  label: 'ER%' },
-  TikTok:      { num: ['Лайки','Коментарі','Репости','Збережень'], den: 'Перегляди',  label: 'ER%' },
-  Facebook:    { num: ['Лайки','Коментарі','Репости'],             den: 'Охоплення',  label: 'ER%' },
-  LinkedIn:    { num: ['Лайки','Коментарі','Кліки'],               den: 'Покази',     label: 'ER%' },
-  Pinterest:   { num: ['Кліки','Збережень'],                       den: 'Покази',     label: 'ER%' },
-  'Twitter/X': { num: ['Лайки','Репости','Цитати','Кліки'],        den: 'Покази',     label: 'ER%' },
-  Telegram:    { num: ['Репости','Реакції'],                        den: 'Перегляди',  label: 'ERR%' },
-  Threads:     { num: ['Лайки','Репости','Відповіді'],             den: 'Покази',     label: 'ER%' },
-}
-
-function calcER(platform: string, metrics: Record<string,string>): string | null {
-  const f = ER_FORMULA[platform]
-  if (!f) return null
-  const den = parseFloat(metrics[f.den] ?? '')
-  if (!den) return null
-  const num = f.num.reduce((s, k) => s + (parseFloat(metrics[k] ?? '') || 0), 0)
-  return ((num / den) * 100).toFixed(2)
-}
-
-const POST_PLATFORM_FORMATS: Record<string, string[]> = {
-  Instagram:   ['Пост','Рілс','Сторіс','Карусель','Прямий ефір'],
-  TikTok:      ['Відео','Слайдшоу','Прямий ефір'],
-  Facebook:    ['Пост','Відео','Рілс','Сторіс','Прямий ефір'],
-  LinkedIn:    ['Пост','Стаття','Відео','Карусель','Опитування'],
-  YouTube:     ['Відео','Shorts','Прямий ефір'],
-  Telegram:    ['Пост','Відео','Опитування','Голосування'],
-  'Twitter/X': ['Твіт','Тред','Відповідь'],
-  Pinterest:   ['Пін','Відео-пін','Ідея-пін'],
-  Threads:     ['Пост','Відповідь'],
-}
-
-const POST_CATEGORIES = [
-  'Експертний','Розважальний','Продаючий','Навчальний',
-  'Надихаючий','UGC','За лаштунками','Новини/Тренди',
-]
-
-const DEFAULT_ALL_PLATFORMS = Object.keys(POST_PLATFORM_METRICS)
-
-function fmtMetricValue(v: string): string {
-  const n = parseFloat(v.replace(/[^\d.]/g,''))
-  if (isNaN(n)) return v
-  if (v.includes('%')) return `${n}%`
-  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n/1_000).toFixed(n>=10_000?0:1)}K`
-  return String(Math.round(n))
-}
-
-// ─── PostMetricsPanel ─────────────────────────────────────────────────────────
-
-function PostMetricsPanel({ project }: { project: Project }) {
-  const today = new Date().toISOString().slice(0,10)
-  const platforms = project.platforms.length > 0 ? project.platforms : DEFAULT_ALL_PLATFORMS
-
-  const emptyDraft = (): PostMetric => ({
-    id: '', projectId: project.id,
-    date: today, platform: platforms[0], format: '', category: '',
-    title: '', metrics: {}, notes: '',
-  })
-
-  const [posts, setPosts]   = useState<PostMetric[]>([])
-  const [draft, setDraft]   = useState<PostMetric>(emptyDraft)
-  const [editId, setEditId] = useState<string|null>(null)
-
-  useEffect(() => { setPosts(getPostMetrics(project.id)) }, [project.id])
-
-  const platformMetrics = POST_PLATFORM_METRICS[draft.platform] ?? []
-  const platformFormats = POST_PLATFORM_FORMATS[draft.platform] ?? []
-
-  function setField<K extends keyof PostMetric>(k: K, v: PostMetric[K]) {
-    setDraft(d => {
-      const next = { ...d, [k]: v }
-      if (k === 'platform') {
-        next.format = ''
-        next.metrics = {}
-      }
-      return next
-    })
-  }
-
-  function setMetric(name: string, val: string) {
-    setDraft(d => ({ ...d, metrics: { ...d.metrics, [name]: val } }))
-  }
-
-  function hasAnyMetric() {
-    return Object.values(draft.metrics).some(v => v.trim() !== '')
-  }
-
-  function save() {
-    if (!draft.format || !draft.category || !hasAnyMetric()) return
-    const er = calcER(draft.platform, draft.metrics)
-    const erLabel = ER_FORMULA[draft.platform]?.label
-    const metricsWithER = er && erLabel
-      ? { ...draft.metrics, [erLabel]: er }
-      : draft.metrics
-    const m: PostMetric = { ...draft, metrics: metricsWithER, id: editId ?? crypto.randomUUID() }
-    savePostMetric(m)
-    setPosts(getPostMetrics(project.id))
-    setDraft(emptyDraft())
-    setEditId(null)
-  }
-
-  function startEdit(p: PostMetric) {
-    setDraft({ ...p })
-    setEditId(p.id)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function remove(id: string) {
-    deletePostMetric(id)
-    setPosts(getPostMetrics(project.id))
-    if (editId === id) { setDraft(emptyDraft()); setEditId(null) }
-  }
-
-  const sortedPosts = [...posts].sort((a,b) => b.date.localeCompare(a.date))
-
-  const inputCls = "w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm outline-none transition-colors"
-  const chipBase = "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
-  const chipOn   = "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
-  const chipOff  = "bg-slate-800/60 border-slate-700/50 text-slate-500 hover:text-slate-300"
-
-  return (
-    <div className="space-y-6">
-      {/* ── Form ── */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5 space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          {editId ? 'Редагувати пост' : 'Новий пост'}
-        </p>
-
-        {/* Row 1: date + platform */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-500 mb-1.5 block">Дата публікації</label>
-            <input type="date" value={draft.date} onChange={e=>setField('date',e.target.value)} className={inputCls}/>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1.5 block">Платформа</label>
-            <div className="flex flex-wrap gap-1.5">
-              {platforms.map(pl=>(
-                <button key={pl} onClick={()=>setField('platform',pl)}
-                  className={`${chipBase} ${draft.platform===pl?chipOn:chipOff}`}
-                  style={draft.platform===pl ? {borderColor:(PLATFORM_COLORS[pl]||'#6366f1')+'88',color:PLATFORM_COLORS[pl]||'#a5b4fc',backgroundColor:(PLATFORM_COLORS[pl]||'#6366f1')+'22'} : {}}>
-                  {pl}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Format */}
-        <div>
-          <label className="text-xs text-slate-500 mb-1.5 block">Формат</label>
-          <div className="flex flex-wrap gap-1.5">
-            {platformFormats.map(f=>(
-              <button key={f} onClick={()=>setField('format',f)}
-                className={`${chipBase} ${draft.format===f?chipOn:chipOff}`}>
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Category */}
-        <div>
-          <label className="text-xs text-slate-500 mb-1.5 block">Тип контенту</label>
-          <div className="flex flex-wrap gap-1.5">
-            {POST_CATEGORIES.map(c=>(
-              <button key={c} onClick={()=>setField('category',c)}
-                className={`${chipBase} ${draft.category===c?chipOn:chipOff}`}>
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Title */}
-        <div>
-          <label className="text-xs text-slate-500 mb-1.5 block">Опис / заголовок поста (необов.)</label>
-          <input value={draft.title} onChange={e=>setField('title',e.target.value)}
-            placeholder="Короткий опис або початок підпису…" className={inputCls}/>
-        </div>
-
-        {/* Metrics grid */}
-        {platformMetrics.length > 0 && (
-          <div>
-            <label className="text-xs text-slate-500 mb-1.5 block">Метрики ({draft.platform})</label>
-            <div className="grid gap-2 mb-3" style={{gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))'}}>
-              {platformMetrics.map(m=>(
-                <div key={m}>
-                  <label className="text-[11px] text-slate-500 mb-1 block">{m}</label>
-                  <input value={draft.metrics[m]??''} onChange={e=>setMetric(m,e.target.value)}
-                    placeholder="0" className={inputCls}/>
-                </div>
-              ))}
-            </div>
-            {/* Auto-computed ER% */}
-            {ER_FORMULA[draft.platform] && (()=>{
-              const er = calcER(draft.platform, draft.metrics)
-              const label = ER_FORMULA[draft.platform].label
-              const f = ER_FORMULA[draft.platform]
-              return (
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20">
-                  <span className="text-xs text-indigo-400 font-semibold">{label}</span>
-                  <span className="text-lg font-bold text-indigo-300">{er ? `${er}%` : '—'}</span>
-                  <span className="text-[10px] text-slate-600 ml-auto">
-                    авто · ({f.num.join(' + ')}) / {f.den} × 100
-                  </span>
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* Notes */}
-        <div>
-          <label className="text-xs text-slate-500 mb-1.5 block">Нотатки (необов.)</label>
-          <textarea value={draft.notes} onChange={e=>setField('notes',e.target.value)}
-            placeholder="Що спрацювало / не спрацювало…" rows={2}
-            className={`${inputCls} resize-none`} style={{minHeight:60}}/>
-        </div>
-
-        <div className="flex gap-3">
-          {editId && (
-            <button onClick={()=>{setDraft(emptyDraft());setEditId(null)}}
-              className="px-4 py-2 rounded-xl text-sm border border-slate-700 text-slate-400 hover:text-white transition-colors">
-              Скасувати
-            </button>
-          )}
-          <button onClick={save}
-            disabled={!draft.format || !draft.category || !hasAnyMetric()}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 rounded-xl text-sm font-semibold transition-colors">
-            {editId ? 'Зберегти зміни' : '+ Зберегти пост'}
-          </button>
-        </div>
-      </div>
-
-      {/* ── History ── */}
-      {sortedPosts.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">Збережені пости ({sortedPosts.length})</p>
-          {sortedPosts.map(post=>{
-            const pMetrics = POST_PLATFORM_METRICS[post.platform] ?? []
-            const erLabel = ER_FORMULA[post.platform]?.label
-            const keyMetrics = pMetrics.slice(0,4)
-            return (
-              <div key={post.id}
-                className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-4 space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-slate-500">{post.date}</span>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">{post.format}</span>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-400 border border-slate-600/40">{post.category}</span>
-                    {post.platform && <span className="text-xs text-slate-600">{post.platform}</span>}
-                  </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={()=>startEdit(post)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
-                      <Edit3 size={13}/>
-                    </button>
-                    <button onClick={()=>remove(post.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                      <Trash2 size={13}/>
-                    </button>
-                  </div>
-                </div>
-
-                {post.title && <p className="text-sm text-slate-300 truncate">{post.title}</p>}
-
-                {/* Metric chips */}
-                <div className="flex flex-wrap gap-3 items-baseline">
-                  {/* ER% first and highlighted */}
-                  {erLabel && post.metrics[erLabel] && (
-                    <span className="flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-indigo-950/50 border border-indigo-500/30">
-                      <span className="text-[10px] text-indigo-500">{erLabel}</span>
-                      <span className="text-sm font-bold text-indigo-300">{post.metrics[erLabel]}%</span>
-                    </span>
-                  )}
-                  {[...keyMetrics, ...pMetrics.slice(4)].filter(m=>post.metrics[m]).map(m=>(
-                    <span key={m} className="flex items-baseline gap-1">
-                      <span className="text-[10px] text-slate-600">{m}</span>
-                      <span className="text-xs font-semibold text-slate-300">{fmtMetricValue(post.metrics[m])}</span>
-                    </span>
-                  ))}
-                </div>
-
-                {post.notes && <p className="text-xs text-slate-600 italic">{post.notes}</p>}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {sortedPosts.length === 0 && (
-        <p className="text-center text-slate-600 text-sm py-6">Ще немає збережених постів — заповніть форму вище</p>
-      )}
-    </div>
-  )
-}
-
-
-// ─── Analytics view ───────────────────────────────────────────────────────────
-
-function AnalyticsView({ projects, onUpdate }: { projects: Project[]; onUpdate: () => void }) {
-  const [selectedId, setSelectedId] = useState<string | null>(() => projects[0]?.id ?? null)
-  const [section, setSection] = useState<'kpi' | 'reports' | 'posts'>('kpi')
-
-  useEffect(() => {
-    setSelectedId(id => id && projects.find(p => p.id === id) ? id : (projects[0]?.id ?? null))
-  }, [projects])
-
-  const project = projects.find(p => p.id === selectedId) ?? null
-
-  function saveKpi(proj: Project, kpis: KpiM[]) {
-    saveProject({ ...proj, data: { ...proj.data, kpi: JSON.stringify(kpis) }, updatedAt: new Date().toISOString() })
-    onUpdate()
-  }
-  function saveReps(proj: Project, reps: MonthlyRep[]) {
-    saveProject({ ...proj, data: { ...proj.data, monthlyReports: JSON.stringify(reps) }, updatedAt: new Date().toISOString() })
-    onUpdate()
-  }
-
-  const totalKpi    = projects.reduce((a, p) => a + parseKM(p.data.kpi).length, 0)
-  const totalMonths = projects.reduce((a, p) => a + parseMR(p.data.monthlyReports).length, 0)
-  const withKpi     = projects.filter(p => parseKM(p.data.kpi).length > 0).length
-
-  return (
-    <div className="space-y-6">
-      {/* Summary — shown only once there's real data */}
-      {(totalKpi > 0 || totalMonths > 0) && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Проєктів з KPI',    value: withKpi,      sub: `з ${projects.length} всього` },
-            { label: 'Місяців залоговано', value: totalMonths,  sub: 'звітів у всіх проєктах' },
-            { label: 'KPI відстежується', value: totalKpi,     sub: 'показників сумарно' },
-          ].map(({ label, value, sub }) => (
-            <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
-              <p className="text-3xl font-bold text-white mb-1">{value}</p>
-              <p className="text-sm font-medium text-slate-300">{label}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Two-column layout */}
-      <div className="flex gap-5 items-start">
-        {/* Left: project list */}
-        <div className="w-52 flex-shrink-0">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-2 mb-2">Проєкти</p>
-          <div className="space-y-1">
-            {projects.length === 0 ? (
-              <p className="text-xs text-slate-600 px-2">Немає проєктів</p>
-            ) : projects.map(p => {
-              const kpiCount = parseKM(p.data.kpi).length
-              const repCount = parseMR(p.data.monthlyReports).length
-              const isSel = p.id === selectedId
-              return (
-                <button key={p.id} onClick={() => setSelectedId(p.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all text-left border"
-                  style={isSel
-                    ? { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.4)', color: '#ffffff' }
-                    : { backgroundColor: 'transparent', borderColor: 'transparent', color: '#94a3b8' }}>
-                  <span className="text-base flex-shrink-0">{p.emoji}</span>
-                  <span className="flex-1 min-w-0 truncate font-medium">{p.name}</span>
-                  <span className="text-xs flex-shrink-0" style={{ color: kpiCount ? '#818cf8' : repCount ? '#6ee7b7' : '#475569' }}>
-                    {kpiCount > 0 ? `${kpiCount} KPI` : repCount > 0 ? `${repCount}м` : ''}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Right: detail */}
-        <div className="flex-1 min-w-0">
-          {project ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-2xl">{project.emoji}</span>
-                <h2 className="text-white font-bold text-lg flex-1 min-w-0 truncate">{project.name}</h2>
-                <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1 border border-slate-700/50">
-                  <button onClick={() => setSection('kpi')}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${section === 'kpi' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-                    KPI (план)
-                  </button>
-                  <button onClick={() => setSection('reports')}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${section === 'reports' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-                    Звіти (факт)
-                  </button>
-                  <button onClick={() => setSection('posts')}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${section === 'posts' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-                    Пости
-                  </button>
-                </div>
-              </div>
-              {section === 'kpi' && (
-                <InlineKpiPanel key={project.id} project={project} onSave={kpis => saveKpi(project, kpis)} />
-              )}
-              {section === 'reports' && (
-                <InlineReportsPanel key={project.id} project={project} onSave={reps => saveReps(project, reps)} />
-              )}
-              {section === 'posts' && (
-                <PostMetricsPanel key={project.id} project={project} />
-              )}
-            </div>
-          ) : (
-            <div className="h-48 flex flex-col items-center justify-center text-slate-600 gap-2">
-              <p className="text-sm">Немає проєктів — створіть перший у розділі Проєкти</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Calendar config ──────────────────────────────────────────────────────────
-
-const EVENT_TYPE_CONFIG: Record<CalendarEventType, { label: string; icon: string; bg: string; border: string; text: string }> = {
-  meeting:  { label: 'Нарада',     icon: '🤝', bg: 'rgba(99,102,241,0.18)',  border: 'rgba(99,102,241,0.5)',  text: '#a5b4fc' },
-  planning: { label: 'Планування', icon: '📅', bg: 'rgba(139,92,246,0.18)',  border: 'rgba(139,92,246,0.5)',  text: '#c4b5fd' },
-  shoot:    { label: 'Зйомка',     icon: '📸', bg: 'rgba(245,158,11,0.18)',  border: 'rgba(245,158,11,0.5)',  text: '#fcd34d' },
-  publish:  { label: 'Публікація', icon: '📤', bg: 'rgba(16,185,129,0.18)',  border: 'rgba(16,185,129,0.5)',  text: '#6ee7b7' },
-  other:    { label: 'Інше',       icon: '📌', bg: 'rgba(100,116,139,0.18)', border: 'rgba(100,116,139,0.4)', text: '#94a3b8' },
-}
-
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд']
-const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
-
-function toIsoDate(y: number, m: number, d: number) {
-  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-}
-
-function todayIso() {
-  const n = new Date()
-  return toIsoDate(n.getFullYear(), n.getMonth(), n.getDate())
-}
-
-// ─── Calendar view ────────────────────────────────────────────────────────────
-
-function CalendarView({ projects }: { projects: Project[] }) {
-  const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())
-  const [viewMode, setViewMode] = useState<'week'|'month'|'list'>('week')
-  const [weekAnchor, setWeekAnchor] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-    return d.toISOString().slice(0, 10)
-  })
-  const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [filterProject, setFilterProject] = useState('')
-  const [filterOpen, setFilterOpen] = useState(false)
-  const [form, setForm] = useState<{ open: boolean; date: string; editing: CalendarEvent | null }>({ open: false, date: '', editing: null })
-  const [draft, setDraft] = useState<Omit<CalendarEvent, 'id'>>({ title: '', date: '', time: '', type: 'publish', projectId: '', notes: '' })
-
-  useEffect(() => { setEvents(getCalendarEvents()) }, [])
-
-  function persist(next: CalendarEvent[]) { saveCalendarEvents(next); setEvents(next) }
-
-  function openAdd(date: string, time?: string) {
-    setDraft({ title: '', date, time: time ?? '', type: 'publish', projectId: '', notes: '' })
-    setForm({ open: true, date, editing: null })
-  }
-  function openEdit(ev: CalendarEvent, e: React.MouseEvent) {
-    e.stopPropagation()
-    setDraft({ title: ev.title, date: ev.date, time: ev.time, type: ev.type, projectId: ev.projectId, notes: ev.notes })
-    setForm({ open: true, date: ev.date, editing: ev })
-  }
-  function saveEvent() {
-    if (!draft.title.trim()) return
-    if (form.editing) {
-      persist(events.map(ev => ev.id === form.editing!.id ? { ...draft, id: form.editing!.id } : ev))
-    } else {
-      persist([...events, { ...draft, id: crypto.randomUUID() }])
-    }
-    setForm({ open: false, date: '', editing: null })
-  }
-  function deleteEvent(id: string) {
-    persist(events.filter(ev => ev.id !== id))
-    setForm({ open: false, date: '', editing: null })
-  }
-  function prevMonth() { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
-  function nextMonth() { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
-  function prevWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()-7); setWeekAnchor(d.toISOString().slice(0,10)) }
-  function nextWeek() { const d = new Date(weekAnchor); d.setDate(d.getDate()+7); setWeekAnchor(d.toISOString().slice(0,10)) }
-
-  const today = todayIso()
-  const firstDayOfWeek = ((new Date(year, month, 1).getDay() + 6) % 7)
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const cells = Array.from({ length: Math.ceil((firstDayOfWeek + daysInMonth) / 7) * 7 }, (_, i) => {
-    const d = i - firstDayOfWeek + 1; return d >= 1 && d <= daysInMonth ? d : null
-  })
-
-  const weekDays = Array.from({length:7}, (_,i) => {
-    const d = new Date(weekAnchor); d.setDate(d.getDate()+i)
-    const iso = d.toISOString().slice(0,10)
-    return {iso, day:d.getDate(), monthIdx:d.getMonth(), label:WEEKDAYS[i], isToday:iso===today, isWeekend:i>=5}
-  })
-
-  const filtered = filterProject ? events.filter(ev => ev.projectId === filterProject) : events
-  const byDate = filtered.reduce<Record<string, CalendarEvent[]>>((acc, ev) => {
-    if (!acc[ev.date]) acc[ev.date] = []; acc[ev.date].push(ev); return acc
-  }, {})
-
-  const periodLabel = viewMode==='month' ? `${MONTHS_UK[month]} ${year}` : viewMode==='week' ? (()=>{
-    const s=new Date(weekDays[0].iso), e=new Date(weekDays[6].iso)
-    if (s.getMonth()===e.getMonth()) return `${s.getDate()}–${e.getDate()} ${MONTHS_UK[e.getMonth()].toLowerCase()} ${e.getFullYear()}`
-    return `${s.getDate()} ${MONTHS_UK[s.getMonth()].slice(0,3).toLowerCase()} – ${e.getDate()} ${MONTHS_UK[e.getMonth()].slice(0,3).toLowerCase()} ${e.getFullYear()}`
-  })() : 'Список подій'
-
-  const HOURS = Array.from({length:14}, (_,i)=>i+8) // 8..21
-
-  function evStyle(ev: CalendarEvent) {
-    if (!filterProject && ev.projectId) {
-      const c = getProjectColor(ev.projectId)
-      return { bg: c+'25', border: c+'60', text: c, icon: EVENT_TYPE_CONFIG[ev.type].icon }
-    }
-    const cfg = EVENT_TYPE_CONFIG[ev.type]
-    return { bg: cfg.bg, border: cfg.border, text: cfg.text, icon: cfg.icon }
-  }
-
-  const allFutureEvents = filtered
-    .filter(e=>e.date>=today)
-    .sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.time||'').localeCompare(b.time||''))
-  const byDateList = allFutureEvents.reduce<Record<string,CalendarEvent[]>>((acc,ev)=>{
-    if(!acc[ev.date]) acc[ev.date]=[]; acc[ev.date].push(ev); return acc
-  },{})
-
-  return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-slate-800 border border-slate-700 rounded-xl p-1 gap-0.5">
-          {(['week','month','list'] as const).map(v=>(
-            <button key={v} onClick={()=>setViewMode(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode===v?'bg-indigo-600 text-white':'text-slate-400 hover:text-white'}`}>
-              {v==='week'?'Тиждень':v==='month'?'Місяць':'Список'}
-            </button>
-          ))}
-        </div>
-
-        {viewMode!=='list'&&(
-          <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-1 py-1">
-            <button onClick={viewMode==='week'?prevWeek:prevMonth}
-              className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
-              <ChevronLeft size={16}/>
-            </button>
-            <span className="text-white font-semibold text-sm px-2 min-w-[170px] text-center">{periodLabel}</span>
-            <button onClick={viewMode==='week'?nextWeek:nextMonth}
-              className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white">
-              <ChevronRight size={16}/>
-            </button>
-          </div>
-        )}
-
-        <div className="relative">
-          {filterOpen&&<div className="fixed inset-0 z-10" onClick={()=>setFilterOpen(false)}/>}
-          <button onClick={()=>setFilterOpen(o=>!o)}
-            className="flex items-center gap-2 bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-300 transition-colors">
-            {filterProject ? (
-              <>
-                <span style={{width:8,height:8,borderRadius:4,backgroundColor:getProjectColor(filterProject),flexShrink:0,display:'inline-block'}}/>
-                <span className="max-w-[120px] truncate">{projects.find(p=>p.id===filterProject)?.emoji} {projects.find(p=>p.id===filterProject)?.name}</span>
-                <span onClick={e=>{e.stopPropagation();setFilterProject('');setFilterOpen(false)}} className="text-slate-500 hover:text-slate-300 cursor-pointer"><X size={11}/></span>
-              </>
-            ) : <span>Всі проєкти</span>}
-            <ChevronDown size={12} className="text-slate-500 flex-shrink-0"/>
-          </button>
-          {filterOpen&&(
-            <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl py-1 z-20 min-w-[190px] shadow-xl">
-              <button onClick={()=>{setFilterProject('');setFilterOpen(false)}}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${!filterProject?'text-white bg-slate-700/50':'text-slate-400 hover:bg-slate-700/30'}`}>
-                <span style={{width:8,height:8,borderRadius:4,backgroundColor:'#374151',display:'inline-block',flexShrink:0}}/>
-                Всі проєкти
-              </button>
-              {projects.map(p=>(
-                <button key={p.id} onClick={()=>{setFilterProject(p.id);setFilterOpen(false)}}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${filterProject===p.id?'text-white bg-slate-700/50':'text-slate-400 hover:bg-slate-700/30'}`}>
-                  <span style={{width:8,height:8,borderRadius:4,backgroundColor:getProjectColor(p.id),display:'inline-block',flexShrink:0}}/>
-                  {p.emoji} {p.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <button onClick={()=>openAdd(today)}
-          className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
-          <Plus size={15}/> Додати подію
-        </button>
-      </div>
-
-      {/* ── MONTH VIEW ── */}
-      {viewMode==='month'&&(
-        <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden relative">
-          {events.length===0&&(
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-[2px] rounded-2xl">
-              <div className="text-center">
-                <p className="text-3xl mb-3">🗓️</p>
-                <p className="text-slate-300 font-semibold text-base mb-1">Календар порожній</p>
-                <p className="text-slate-500 text-sm mb-5">Додай першу подію — нараду, зйомку або публікацію</p>
-                <button onClick={()=>openAdd(today)}
-                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
-                  <Plus size={15}/> Додати подію
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-7 border-b border-slate-700/60">
-            {WEEKDAYS.map(d=><div key={d} className="py-2.5 text-center text-xs font-semibold tracking-wider text-slate-500">{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7">
-            {cells.map((day,idx)=>{
-              if(!day) return <div key={idx} className="min-h-[90px] border-b border-r border-slate-700/30 bg-slate-900/20"/>
-              const iso=toIsoDate(year,month,day)
-              const dayEvents=byDate[iso]??[]
-              const isToday=iso===today
-              const isWeekend=idx%7>=5
-              return (
-                <div key={idx} onClick={()=>openAdd(iso)}
-                  className={`group min-h-[90px] border-b border-r border-slate-700/30 p-1.5 cursor-pointer transition-colors hover:bg-indigo-950/30 ${isWeekend?'bg-slate-900/10':''}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${isToday?'bg-indigo-600 text-white':isWeekend?'text-slate-500':'text-slate-400'}`}>{day}</div>
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 text-sm font-light select-none">+</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {dayEvents.slice(0,3).map(ev=>{
-                      const s=evStyle(ev)
-                      return (
-                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
-                          className="rounded px-1.5 py-0.5 text-[11px] leading-tight truncate border cursor-pointer hover:opacity-80 transition-opacity"
-                          style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
-                          {s.icon} {ev.title}
-                        </div>
-                      )
-                    })}
-                    {dayEvents.length>3&&<div className="text-[10px] text-slate-500 px-1">+{dayEvents.length-3} ще</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── WEEK VIEW ── */}
-      {viewMode==='week'&&(
-        <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden">
-          {/* Day headers */}
-          <div className="grid border-b border-slate-700/60" style={{gridTemplateColumns:'52px repeat(7,1fr)'}}>
-            <div className="border-r border-slate-700/30"/>
-            {weekDays.map(d=>(
-              <div key={d.iso} onClick={()=>openAdd(d.iso)}
-                className={`group py-3 text-center border-r border-slate-700/30 last:border-r-0 cursor-pointer transition-colors hover:bg-indigo-950/30 relative ${d.isWeekend?'bg-slate-900/20':''}`}>
-                <p className="text-xs text-slate-500 font-medium">{d.label}</p>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold mx-auto mt-0.5 ${d.isToday?'bg-indigo-600 text-white':'text-slate-300'}`}>
-                  {d.day}
-                </div>
-                <span className="absolute top-1.5 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 text-sm select-none">+</span>
-              </div>
-            ))}
-          </div>
-          {/* All-day row */}
-          {weekDays.some(d=>(byDate[d.iso]??[]).some(e=>!e.time))&&(
-            <div className="grid border-b border-slate-700/60" style={{gridTemplateColumns:'52px repeat(7,1fr)'}}>
-              <div className="flex items-center justify-center border-r border-slate-700/30 py-1.5">
-                <span className="text-[10px] text-slate-600 font-medium rotate-0 leading-none text-center">весь<br/>день</span>
-              </div>
-              {weekDays.map(d=>{
-                const allDay=(byDate[d.iso]??[]).filter(e=>!e.time)
-                return (
-                  <div key={d.iso} className={`border-r border-slate-700/30 last:border-r-0 p-1 min-h-[28px] ${d.isWeekend?'bg-slate-900/10':''}`}>
-                    {allDay.map(ev=>{
-                      const s=evStyle(ev)
-                      return (
-                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
-                          className="rounded px-1.5 py-0.5 text-[11px] truncate border cursor-pointer hover:opacity-80 mb-0.5"
-                          style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
-                          {s.icon} {ev.title}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          {/* Time grid */}
-          <div className="overflow-y-auto" style={{maxHeight:560}}>
-            {HOURS.map(h=>(
-              <div key={h} className="grid border-b border-slate-700/20 last:border-b-0" style={{gridTemplateColumns:'52px repeat(7,1fr)',minHeight:48}}>
-                <div className="border-r border-slate-700/30 flex items-start justify-end pr-2 pt-1">
-                  <span className="text-[10px] text-slate-600">{String(h).padStart(2,'0')}:00</span>
-                </div>
-                {weekDays.map(d=>{
-                  const hourEvents=(byDate[d.iso]??[]).filter(ev=>{
-                    if(!ev.time) return false
-                    const [hh]=ev.time.split(':').map(Number)
-                    return hh===h
-                  })
-                  return (
-                    <div key={d.iso} onClick={()=>openAdd(d.iso,`${String(h).padStart(2,'0')}:00`)}
-                      className={`group relative border-r border-slate-700/20 last:border-r-0 p-0.5 cursor-pointer hover:bg-indigo-950/30 transition-colors ${d.isWeekend?'bg-slate-900/10':''}`}>
-                      {hourEvents.length===0&&<span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-slate-700 text-xs select-none pointer-events-none">+</span>}
-                      {hourEvents.map(ev=>{
-                        const s=evStyle(ev)
-                        return (
-                          <div key={ev.id} onClick={e=>openEdit(ev,e)}
-                            className="rounded px-1.5 py-1 text-[11px] border cursor-pointer hover:opacity-80 mb-0.5"
-                            style={{backgroundColor:s.bg,borderColor:s.border,color:s.text}}>
-                            <span className="font-semibold">{ev.time}</span> {s.icon} <span className="truncate">{ev.title}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-          {/* Empty week state */}
-          {weekDays.every(d=>!(byDate[d.iso]?.length))&&(
-            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-              <p className="text-slate-500 text-sm">Цього тижня подій немає</p>
-              <button onClick={()=>openAdd(weekDays.find(d=>d.isToday)?.iso??weekDays[0].iso)}
-                className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">
-                <Plus size={14}/> Додати подію
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── LIST VIEW ── */}
-      {viewMode==='list'&&(
-        <div className="space-y-4">
-          {allFutureEvents.length===0?(
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <p className="text-3xl">🗓️</p>
-              <p className="text-slate-300 font-semibold">Майбутніх подій немає</p>
-              <p className="text-slate-500 text-sm mb-2">Заплануй нараду, зйомку або публікацію</p>
-              <button onClick={()=>openAdd(today)}
-                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
-                <Plus size={15}/> Додати подію
-              </button>
-            </div>
-          ):(
-            Object.entries(byDateList).map(([date,evs])=>{
-              const d=new Date(date)
-              const isToday=date===today
-              const label=isToday?'Сьогодні':d.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'})
-              return (
-                <div key={date}>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className={`text-xs font-semibold uppercase tracking-wider ${isToday?'text-indigo-400':'text-slate-500'}`}>{label}</span>
-                    <div className="flex-1 h-px bg-slate-700/50"/>
-                  </div>
-                  <div className="space-y-2">
-                    {evs.map(ev=>{
-                      const s=evStyle(ev)
-                      const proj=projects.find(p=>p.id===ev.projectId)
-                      return (
-                        <div key={ev.id} onClick={e=>openEdit(ev,e)}
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity"
-                          style={{backgroundColor:s.bg,borderColor:s.border}}>
-                          <span className="text-base flex-shrink-0">{s.icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm" style={{color:s.text}}>{ev.title}</p>
-                            {ev.notes&&<p className="text-xs text-slate-500 truncate mt-0.5">{ev.notes}</p>}
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {ev.time&&<span className="text-xs font-semibold" style={{color:s.text}}>{ev.time}</span>}
-                            {proj&&!filterProject&&<span className="text-xs text-slate-500">{proj.emoji} {proj.name}</span>}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3">
-        {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([,cfg])=>(
-          <div key={cfg.label} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="w-2 h-2 rounded-full" style={{backgroundColor:cfg.border}}/>
-            {cfg.icon} {cfg.label}
-          </div>
-        ))}
-      </div>
-
-      {/* Event form modal */}
-      {form.open&&(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={()=>setForm({open:false,date:'',editing:null})}>
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-semibold text-lg">{form.editing?'Редагувати подію':'Нова подія'}</h2>
-              <button onClick={()=>setForm({open:false,date:'',editing:null})} className="text-slate-500 hover:text-white transition-colors">
-                <X size={18}/>
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Назва *</label>
-                <input type="text" value={draft.title} onChange={e=>setDraft(d=>({...d,title:e.target.value}))}
-                  placeholder="Що відбувається?" autoFocus
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors"/>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Дата</label>
-                  <input type="date" value={draft.date} onChange={e=>setDraft(d=>({...d,date:e.target.value}))}
-                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"/>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Clock size={11}/> Час (необов.)</label>
-                  <input type="time" value={draft.time} onChange={e=>setDraft(d=>({...d,time:e.target.value}))}
-                    className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm transition-colors"/>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-2 block">Тип події</label>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.entries(EVENT_TYPE_CONFIG) as [CalendarEventType, typeof EVENT_TYPE_CONFIG[CalendarEventType]][]).map(([type,cfg])=>(
-                    <button key={type} onClick={()=>setDraft(d=>({...d,type}))}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
-                      style={draft.type===type
-                        ?{backgroundColor:cfg.bg,borderColor:cfg.border,color:cfg.text}
-                        :{backgroundColor:'rgba(30,41,59,0.6)',borderColor:'rgba(71,85,105,0.5)',color:'#64748b'}}>
-                      {cfg.icon} {cfg.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Проєкт (необов.)</label>
-                <select value={draft.projectId} onChange={e=>setDraft(d=>({...d,projectId:e.target.value}))}
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white text-sm outline-none">
-                  <option value="">Без проєкту</option>
-                  {projects.map(p=><option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Нотатки (необов.)</label>
-                <textarea value={draft.notes} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))}
-                  placeholder="Деталі, посилання на зустріч..." rows={2}
-                  className="w-full bg-slate-700 border border-slate-600 focus:border-indigo-500 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm transition-colors resize-none"/>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-5">
-              {form.editing&&(
-                <button onClick={()=>deleteEvent(form.editing!.id)}
-                  className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-sm font-medium transition-colors">
-                  Видалити
-                </button>
-              )}
-              <button onClick={()=>setForm({open:false,date:'',editing:null})}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
-                Скасувати
-              </button>
-              <button onClick={saveEvent} disabled={!draft.title.trim()}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
-                {form.editing?'Зберегти':'Додати'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-
-// ─── Platform + layout config ─────────────────────────────────────────────────
-
-const PLATFORM_OPTIONS = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Telegram','Twitter/X','Pinterest','Threads']
-const PLATFORM_COLORS: Record<string, string> = {
-  Instagram:'#e1306c', Facebook:'#1877f2', TikTok:'#69c9d0', LinkedIn:'#0a66c2',
-  YouTube:'#ff0000', Telegram:'#229ed9', 'Twitter/X':'#1da1f2', Pinterest:'#e60023', Threads:'#aaaaaa',
-}
-function getProjectColor(id: string): string {
-  const p=['#1d4ed8','#7c3aed','#059669','#dc2626','#d97706','#0891b2','#db2777','#2563eb']
-  return p[id.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%p.length]
-}
-function projectInitials(name: string): string {
-  return name.split(' ').map(w=>w[0]).filter(Boolean).slice(0,2).join('').toUpperCase()||'?'
-}
-
-type NavView = 'dashboard'|'projects'|'calendar'|'analytics'
-
-function NavBtn({label,Icon,active,onClick}:{label:string;Icon:LucideIcon;active:boolean;onClick:()=>void}) {
-  const [hov,setHov]=useState(false)
-  return (
-    <button onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:2,border:'none',cursor:'pointer',
-        backgroundColor:active?'rgba(37,99,235,0.18)':hov?'rgba(255,255,255,0.04)':'transparent',
-        color:active?'#60a5fa':'#4b5563',fontWeight:active?600:400,fontSize:14,textAlign:'left',transition:'all 0.12s'}}>
-      <Icon size={17}/><span>{label}</span>
-      {active&&<span style={{marginLeft:'auto',width:6,height:6,borderRadius:3,backgroundColor:'#3b82f6',flexShrink:0}}/>}
+    <button onClick={onClick} disabled={disabled}
+      style={{ ...vs[variant], padding: sm ? '5px 12px' : '9px 20px', borderRadius: 8, fontSize: sm ? 12 : 14, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', fontFamily: 'var(--font-body)', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: disabled ? 0.5 : 1 }}>
+      {children}
     </button>
   )
 }
 
-function Sidebar({active,onNav,projects,onImport}:{active:NavView;onNav:(v:NavView)=>void;projects:Project[];onImport:()=>void}) {
-  const router = useRouter()
-  const [projOpen, setProjOpen] = useState(true)
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22, ...style }}>{children}</div>
+}
 
-  const topItems:[NavView,string,LucideIcon][]=[
-    ['dashboard','Дашборд',LayoutDashboard],
-    ['calendar','Контент-планер',CalendarDays],
-    ['analytics','Аналітика',BarChart2],
-  ]
+function Hd({ children }: { children: React.ReactNode }) {
+  return <h2 style={{ fontFamily: 'var(--font-head)', color: C.text, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', marginBottom: 18, textTransform: 'uppercase' }}>{children}</h2>
+}
 
+function Modal({ open, onClose, title, children, wide }: {
+  open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean
+}) {
+  if (!open) return null
   return (
-    <aside style={{width:242,flexShrink:0,backgroundColor:'#04090f',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,borderRight:'1px solid rgba(255,255,255,0.05)'}}>
-      <div style={{padding:'20px 16px 16px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-            <Zap size={18} color="#fff"/>
-          </div>
-          <div>
-            <p style={{color:'#e2e8f0',fontWeight:700,fontSize:15,lineHeight:1.2}}>SMMFlow</p>
-            <p style={{color:'#374151',fontSize:11}}>Операційна система</p>
-          </div>
+    <div className="slide-up" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
+      onClick={onClose}>
+      <div style={{ background: C.surf, borderRadius: 18, padding: 30, width: '100%', maxWidth: wide ? 680 : 500, maxHeight: '88vh', overflowY: 'auto', border: `1px solid ${C.border}` }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+          <h2 style={{ fontFamily: 'var(--font-head)', color: C.text, fontSize: 16 }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 22, lineHeight: 1 }}>×</button>
         </div>
+        {children}
       </div>
+    </div>
+  )
+}
 
-      <nav style={{flex:1,padding:'8px',overflowY:'auto'}}>
-        <NavBtn label="Дашборд" Icon={LayoutDashboard} active={active==='dashboard'} onClick={()=>onNav('dashboard')}/>
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+const NAV: [Section, string, React.ElementType][] = [
+  ['profile', 'Профіль', User],
+  ['strategy', 'Стратегія', Target],
+  ['calendar', 'Календар', CalendarDays],
+  ['analytics', 'Аналітика', BarChart2],
+  ['clients', 'Клієнти', Users],
+]
 
-        {/* Projects with expandable sub-list */}
-        <div style={{marginBottom:2}}>
-          <div style={{display:'flex',alignItems:'center',borderRadius:10,overflow:'hidden'}}>
-            <button
-              onClick={()=>onNav('projects')}
-              style={{flex:1,display:'flex',alignItems:'center',gap:10,padding:'9px 8px 9px 12px',border:'none',cursor:'pointer',
-                backgroundColor:active==='projects'?'rgba(37,99,235,0.18)':'transparent',
-                color:active==='projects'?'#60a5fa':'#4b5563',fontWeight:active==='projects'?600:400,fontSize:14,textAlign:'left',transition:'all 0.12s'}}>
-              <FolderOpen size={17}/>
-              <span style={{flex:1}}>Проєкти</span>
-              {active==='projects'&&<span style={{width:6,height:6,borderRadius:3,backgroundColor:'#3b82f6',flexShrink:0,marginRight:4}}/>}
+function Sidebar({ active, onChange, onExport, onImport }: {
+  active: Section; onChange: (s: Section) => void
+  onExport: () => void; onImport: () => void
+}) {
+  return (
+    <aside style={{ width: 230, flexShrink: 0, background: C.surf, display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0, borderRight: `1px solid ${C.border}` }}>
+      <div style={{ padding: '24px 16px 16px' }}>
+        <div style={{ fontFamily: 'var(--font-head)', color: C.accent, fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Brand</div>
+        <div style={{ fontFamily: 'var(--font-head)', color: C.muted, fontSize: 11, marginTop: 2 }}>Dashboard</div>
+      </div>
+      <nav style={{ flex: 1, padding: '8px 10px' }}>
+        {NAV.map(([id, label, Icon]) => {
+          const active_ = active === id
+          return (
+            <button key={id} onClick={() => onChange(id)} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', borderRadius: 10, marginBottom: 2, border: 'none', cursor: 'pointer',
+              background: active_ ? 'rgba(200,217,111,0.12)' : 'transparent',
+              color: active_ ? C.accent : C.muted, fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: active_ ? 600 : 400,
+            }}>
+              <Icon size={17} />{label}
             </button>
-            <button
-              onClick={()=>setProjOpen(o=>!o)}
-              style={{padding:'9px 10px',border:'none',cursor:'pointer',backgroundColor:'transparent',
-                color:'#374151',transition:'color 0.12s,transform 0.15s',
-                transform:projOpen?'rotate(90deg)':'rotate(0deg)'}}
-              onMouseEnter={e=>(e.currentTarget.style.color='#6b7280')}
-              onMouseLeave={e=>(e.currentTarget.style.color='#374151')}>
-              <ChevronRight size={14}/>
-            </button>
-          </div>
-
-          {/* Sub-items */}
-          {projOpen && projects.length > 0 && (
-            <div style={{paddingLeft:12,marginTop:1}}>
-              {projects.map(p=>{
-                const color = getProjectColor(p.id)
-                return (
-                  <button key={p.id}
-                    onClick={()=>router.push(`/projects/${p.id}`)}
-                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'none',cursor:'pointer',
-                      backgroundColor:'transparent',transition:'background 0.1s',textAlign:'left',marginBottom:1}}
-                    onMouseEnter={e=>(e.currentTarget.style.backgroundColor='rgba(255,255,255,0.04)')}
-                    onMouseLeave={e=>(e.currentTarget.style.backgroundColor='transparent')}>
-                    <span style={{width:7,height:7,borderRadius:3.5,backgroundColor:color,flexShrink:0}}/>
-                    <span style={{fontSize:12,color:'#4b5563',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
-                      {p.name}
-                    </span>
-                    <span style={{fontSize:10,color:'#1f2937',flexShrink:0}}>
-                      {getProgress(p.data)}%
-                    </span>
-                  </button>
-                )
-              })}
-              {projects.length === 0 && (
-                <p style={{fontSize:12,color:'#1f2937',padding:'4px 10px'}}>Немає проєктів</p>
-              )}
-            </div>
-          )}
-
-          {projOpen && projects.length === 0 && (
-            <div style={{paddingLeft:12,marginTop:1}}>
-              <button onClick={()=>onNav('projects')}
-                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'none',cursor:'pointer',
-                  backgroundColor:'transparent',color:'#374151',fontSize:12,textAlign:'left'}}>
-                + Створити перший проєкт
-              </button>
-            </div>
-          )}
-        </div>
-
-        <NavBtn label="Контент-планер" Icon={CalendarDays} active={active==='calendar'} onClick={()=>onNav('calendar')}/>
-        <NavBtn label="Аналітика" Icon={BarChart2} active={active==='analytics'} onClick={()=>onNav('analytics')}/>
-
-        <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',margin:'8px 0'}}/>
-        {([['Центр ідей',Lightbulb],['Навички',TrendingUp]] as [string,LucideIcon][]).map(([label,Icon])=>(
-          <button key={label} disabled style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:2,border:'none',backgroundColor:'transparent',color:'#1f2937',fontSize:14,textAlign:'left',cursor:'default'}}>
-            <Icon size={17}/><span>{label}</span>
-            <span style={{marginLeft:'auto',fontSize:10,color:'#1f2937',border:'1px solid #1f2937',padding:'1px 5px',borderRadius:4}}>скоро</span>
-          </button>
-        ))}
+          )
+        })}
       </nav>
-
-      <div style={{padding:'12px 8px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-        <button onClick={exportAllData} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:2}}>
-          <Download size={17}/>Зберегти дані
+      <div style={{ padding: '12px 10px', borderTop: `1px solid ${C.border}` }}>
+        <button onClick={onExport} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, border: 'none', background: 'transparent', color: C.dim, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)' }}>
+          <Download size={14} />Зберегти дані
         </button>
-        <button onClick={onImport} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,border:'none',backgroundColor:'transparent',color:'#374151',fontSize:14,textAlign:'left',cursor:'pointer',marginBottom:4}}>
-          <Upload size={17}/>Відновити дані
+        <button onClick={onImport} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, border: 'none', background: 'transparent', color: C.dim, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)' }}>
+          <Upload size={14} />Відновити дані
         </button>
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
-          <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>НФ</div>
-          <div>
-            <p style={{color:'#d1d5db',fontSize:13,fontWeight:600}}>Наталія Федік</p>
-            <p style={{color:'#374151',fontSize:11}}>SMM-спеціаліст</p>
-          </div>
-        </div>
       </div>
     </aside>
   )
 }
 
-// ─── DashboardView ────────────────────────────────────────────────────────────
-
-const SECTION_STEPS: { keys: (keyof ProjectData)[]; label: string }[] = [
-  { keys: ['companyName','companyIndustry','companyGeo'],   label: 'базову інформацію' },
-  { keys: ['goals'],                                         label: 'цілі' },
-  { keys: ['tasks'],                                         label: 'задачі' },
-  { keys: ['brandMission','brandVision','brandValues'],     label: 'ДНК бренду' },
-  { keys: ['uvp'],                                           label: 'УЦП' },
-  { keys: ['toneOfVoice','contentRubricator'],              label: 'контент-стратегію' },
-  { keys: ['analytics','competitorAnalysis'],               label: 'аналітику' },
-  { keys: ['paidTools','organicTools'],                     label: 'стратегію просування' },
-  { keys: ['bioStructure','highlights'],                    label: 'біо та хайлайти' },
-  { keys: ['kpi'],                                           label: 'KPI' },
-  { keys: ['implementationStages'],                         label: 'план реалізації' },
-]
-
-function nextStepLabel(data: ProjectData): string | null {
-  for (const s of SECTION_STEPS) {
-    if (s.keys.some(k => !data[k]?.trim())) return s.label
+// ─── Profile Section ──────────────────────────────────────────────────────────
+function ProfileSection() {
+  const [p, setP] = useState<BrandProfile>(() => ld(K.prof, DP))
+  const u = (f: keyof BrandProfile) => (v: string) => {
+    const next = { ...p, [f]: v }
+    setP(next); sv(K.prof, next)
   }
-  return null
-}
-
-const MONTHS_SHORT_UA = ['січ','лют','бер','квіт','трав','черв','лип','серп','вер','жовт','лист','груд']
-function fmtUpdated(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getDate()} ${MONTHS_SHORT_UA[d.getMonth()]}.`
-}
-
-function DashboardView({projects,onNavigate}:{projects:Project[];onNavigate:(v:NavView)=>void}) {
-  const router = useRouter()
-  const now = new Date()
-  const todayStr = now.toISOString().slice(0,10)
-  const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1)
-  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6)
-  const weekStartStr = weekStart.toISOString().slice(0,10)
-  const weekEndStr = weekEnd.toISOString().slice(0,10)
-
-  const events = getCalendarEvents().filter(e=>e.date>=weekStartStr && e.date<=weekEndStr)
-
-  const DAY_NAMES=['Пн','Вт','Ср','Чт','Пт','Сб','Нд']
-  const weekDays: {label:string;date:string}[] = Array.from({length:7},(_,i)=>{
-    const d=new Date(weekStart); d.setDate(weekStart.getDate()+i)
-    return {label:DAY_NAMES[i],date:d.toISOString().slice(0,10)}
-  })
-
-  const EVENT_COLORS: Record<string,string> = {meeting:'#6366f1',planning:'#0891b2',shoot:'#d97706',publish:'#059669',other:'#6b7280'}
-  const EVENT_UA: Record<string,string> = {meeting:'Зустріч',planning:'Планування',shoot:'Зйомка',publish:'Публікація',other:'Інше'}
-
-  const totalProjects = projects.length
-  const activeProjects = projects.filter(p=>getProgress(p.data)>0).length
-
-  const hours = now.getHours()
-  const realGreeting = hours<12?'Доброго ранку':hours<17?'Добрий день':'Добрий вечір'
-
   return (
-    <div style={{padding:'36px 44px',maxWidth:1200}}>
-      {/* Header */}
-      <div style={{marginBottom:32}}>
-        <h1 style={{color:'#e2e8f0',fontSize:26,fontWeight:700,marginBottom:4}}>{realGreeting}, Наталіє 👋</h1>
-        <p style={{color:'#4b5563',fontSize:14}}>{now.toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
-      </div>
-
-      {/* Stat cards — hidden until user has at least one project */}
-      {totalProjects === 0 ? (
-        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:'28px 32px',marginBottom:32}}>
-          <p style={{color:'#e2e8f0',fontSize:16,fontWeight:600,marginBottom:6}}>З чого почати</p>
-          <p style={{color:'#4b5563',fontSize:13,marginBottom:24}}>Три кроки, щоб запустити перший SMM-проєкт</p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
-            {[
-              {step:'01',title:'Створи проєкт',desc:'Додай клієнта або бренд, обери платформи',cta:'Створити →',nav:'projects' as NavView,color:'#3b82f6'},
-              {step:'02',title:'Заповни стратегію',desc:'Цілі, аудиторія, УЦП, тон комунікації',cta:'До проєктів →',nav:'projects' as NavView,color:'#8b5cf6'},
-              {step:'03',title:'Заплануй перший пост',desc:'Відкрий контент-планер і постав дату',cta:'До планера →',nav:'calendar' as NavView,color:'#10b981'},
-            ].map(s=>(
-              <div key={s.step} style={{backgroundColor:'#0f1e30',borderRadius:12,padding:'18px 20px',border:'1px solid rgba(255,255,255,0.04)'}}>
-                <p style={{color:s.color,fontSize:11,fontWeight:700,letterSpacing:'0.08em',marginBottom:8}}>{s.step}</p>
-                <p style={{color:'#e2e8f0',fontSize:13,fontWeight:600,marginBottom:4}}>{s.title}</p>
-                <p style={{color:'#4b5563',fontSize:12,marginBottom:14,lineHeight:1.5}}>{s.desc}</p>
-                <button onClick={()=>onNavigate(s.nav)}
-                  style={{background:'none',border:'none',color:s.color,fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}>
-                  {s.cta}
-                </button>
-              </div>
-            ))}
-          </div>
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 40px' }}>
+      <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 32, color: C.text }}>Профіль бренду</h1>
+      <Card style={{ marginBottom: 24 }}>
+        <Hd>Основне</Hd>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+          <Field label="Назва бренду" value={p.brandName} onChange={u('brandName')} placeholder="Назва вашого бренду" />
+          <Field label="Ніша / Індустрія" value={p.niche} onChange={u('niche')} placeholder="Краса, фітнес, освіта…" />
         </div>
-      ) : (
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:32}}>
-          {[
-            {label:'Активних проєктів',value:activeProjects,sub:`з ${totalProjects} загалом`,color:'#3b82f6'},
-            {label:'Подій цього тижня',value:events.length,sub:'в контент-планері',color:'#8b5cf6'},
-            {label:'Публікацій',value:events.filter(e=>e.type==='publish').length,sub:'цього тижня',color:'#10b981'},
-            {label:'Зустрічей',value:events.filter(e=>e.type==='meeting').length,sub:'цього тижня',color:'#f59e0b'},
-          ].map(s=>(
-            <div key={s.label} style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:'20px 22px'}}>
-              <p style={{color:'#4b5563',fontSize:12,marginBottom:8}}>{s.label}</p>
-              <p style={{fontSize:32,fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</p>
-              <p style={{color:'#374151',fontSize:12,marginTop:6}}>{s.sub}</p>
-            </div>
-          ))}
+        <Field label="Tagline" value={p.tagline} onChange={u('tagline')} placeholder="Короткий слоган" />
+      </Card>
+      <Card style={{ marginBottom: 24 }}>
+        <Hd>ДНК бренду</Hd>
+        <Field label="Місія" value={p.mission} onChange={u('mission')} multiline rows={3} placeholder="Навіщо існує бренд?" />
+        <Field label="Бачення" value={p.vision} onChange={u('vision')} multiline rows={3} placeholder="Яким буде бренд через 3–5 років?" />
+        <Field label="Цінності" value={p.values} onChange={u('values')} multiline rows={3} placeholder="Ключові принципи та цінності" />
+      </Card>
+      <Card style={{ marginBottom: 24 }}>
+        <Hd>Аудиторія та позиціювання</Hd>
+        <Field label="Цільова аудиторія" value={p.audience} onChange={u('audience')} multiline rows={4} placeholder="Хто ваш ідеальний клієнт?" />
+        <Field label="УЦП (унікальна цінністна пропозиція)" value={p.uvp} onChange={u('uvp')} multiline rows={3} placeholder="Що вирізняє вас серед інших?" />
+        <Field label="Tone of Voice" value={p.toneOfVoice} onChange={u('toneOfVoice')} multiline rows={3} placeholder="Як ви спілкуєтесь з аудиторією?" />
+      </Card>
+      <Card>
+        <Hd>Соціальні мережі та посилання</Hd>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+          <Field label="Instagram" value={p.instagram} onChange={u('instagram')} placeholder="@username або URL" />
+          <Field label="TikTok" value={p.tiktok} onChange={u('tiktok')} placeholder="@username або URL" />
+          <Field label="Facebook" value={p.facebook} onChange={u('facebook')} placeholder="URL сторінки" />
+          <Field label="YouTube" value={p.youtube} onChange={u('youtube')} placeholder="URL каналу" />
+          <Field label="Сайт" value={p.website} onChange={u('website')} placeholder="https://…" />
         </div>
-      )}
-
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-        {/* Projects list */}
-        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:22}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
-            <h2 style={{color:'#e2e8f0',fontSize:15,fontWeight:600}}>Проєкти</h2>
-            <button onClick={()=>onNavigate('projects')} style={{color:'#3b82f6',fontSize:12,background:'none',border:'none',cursor:'pointer'}}>Всі проєкти →</button>
-          </div>
-          {projects.length===0?(
-            <p style={{color:'#374151',fontSize:13,textAlign:'center',padding:'24px 0'}}>Ще немає проєктів</p>
-          ):(
-            <div style={{display:'flex',flexDirection:'column',gap:12}}>
-              {projects.slice(0,5).map(p=>{
-                const prog=getProgress(p.data)
-                const color=getProjectColor(p.id)
-                const next=nextStepLabel(p.data)
-                return (
-                  <div key={p.id} onClick={()=>router.push(`/projects/${p.id}`)}
-                    style={{display:'flex',alignItems:'flex-start',gap:12,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.12s',margin:'0 -10px'}}
-                    onMouseEnter={e=>(e.currentTarget.style.backgroundColor='rgba(255,255,255,0.03)')}
-                    onMouseLeave={e=>(e.currentTarget.style.backgroundColor='transparent')}>
-                    <div style={{width:36,height:36,borderRadius:10,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:13,fontWeight:700,flexShrink:0,marginTop:2}}>
-                      {projectInitials(p.name)}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
-                        <p style={{color:'#d1d5db',fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
-                        <span style={{color:'#4b5563',fontSize:11,flexShrink:0,marginLeft:8}}>{prog}%</span>
-                      </div>
-                      <div style={{height:3,backgroundColor:'#0f1e30',borderRadius:2,marginBottom:6}}>
-                        <div style={{height:3,borderRadius:2,backgroundColor:color,width:`${prog}%`,transition:'width 0.3s'}}/>
-                      </div>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        {prog<100&&next
-                          ? <span style={{color:'#374151',fontSize:11}}>→ заповнити {next}</span>
-                          : <span style={{color:'#10b981',fontSize:11}}>✓ повністю заповнено</span>}
-                        <span style={{color:'#1f2937',fontSize:11,flexShrink:0,marginLeft:8}}>{fmtUpdated(p.updatedAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Week calendar */}
-        <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.05)',borderRadius:14,padding:22}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
-            <h2 style={{color:'#e2e8f0',fontSize:15,fontWeight:600}}>Контент цього тижня</h2>
-            <button onClick={()=>onNavigate('calendar')} style={{color:'#3b82f6',fontSize:12,background:'none',border:'none',cursor:'pointer'}}>Планер →</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:12}}>
-            {weekDays.map(d=>(
-              <div key={d.date} style={{textAlign:'center'}}>
-                <p style={{color:'#374151',fontSize:10,marginBottom:4}}>{d.label}</p>
-                <div style={{width:28,height:28,borderRadius:8,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',
-                  backgroundColor:d.date===todayStr?'#1d4ed8':'transparent',
-                  border:d.date===todayStr?'none':'1px solid rgba(255,255,255,0.04)'}}>
-                  <span style={{color:d.date===todayStr?'#fff':'#4b5563',fontSize:11}}>{d.date.slice(8)}</span>
-                </div>
-                <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:2}}>
-                  {events.filter(e=>e.date===d.date).slice(0,3).map(e=>(
-                    <div key={e.id} style={{height:4,borderRadius:2,backgroundColor:EVENT_COLORS[e.type]}}/>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          {events.length===0?(
-            <p style={{color:'#374151',fontSize:12,textAlign:'center',paddingTop:8}}>Немає подій цього тижня</p>
-          ):(
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {events.slice(0,4).map(e=>(
-                <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',backgroundColor:'#0f1e30',borderRadius:8}}>
-                  <div style={{width:8,height:8,borderRadius:4,backgroundColor:EVENT_COLORS[e.type],flexShrink:0}}/>
-                  <p style={{color:'#d1d5db',fontSize:12,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.title}</p>
-                  <span style={{color:'#374151',fontSize:11,flexShrink:0}}>{EVENT_UA[e.type]}</span>
-                </div>
-              ))}
-              {events.length>4&&<p style={{color:'#374151',fontSize:11,textAlign:'center'}}>+{events.length-4} подій</p>}
-            </div>
-          )}
-        </div>
-      </div>
+      </Card>
     </div>
   )
 }
 
-// ─── ProjectsView ─────────────────────────────────────────────────────────────
+// ─── Strategy Section ─────────────────────────────────────────────────────────
+const RUBRIC_COLORS = ['#C8D96F','#60935D','#F5F0E8','#4ade80','#facc15','#f97316','#818cf8','#f472b6']
 
-const EMOJI_OPTIONS = ['🚀','💼','🎯','✨','🌿','🔥','💡','🎨','📱','🛍️','🏋️','🍕','🌍','💎','🎵']
+function StrategySection() {
+  const [s, setS] = useState<StrategyData>(() => ld(K.strat, DS))
+  const save = (next: StrategyData) => { setS(next); sv(K.strat, next) }
 
-function ProjectsView({projects,onRefresh}:{projects:Project[];onRefresh:()=>void}) {
-  const router = useRouter()
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmoji, setNewEmoji] = useState('🚀')
-  const [newDesc, setNewDesc] = useState('')
-  const [newPlatforms, setNewPlatforms] = useState<string[]>([])
-  const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
+  const [goalModal, setGoalModal] = useState<Goal | null | 'new'>(null)
+  const [rubricModal, setRubricModal] = useState<Rubric | null | 'new'>(null)
 
-  function handleCreate() {
-    if (!newName.trim()) return
-    const p = createProject(newName.trim(), newEmoji, newDesc.trim(), newPlatforms)
-    onRefresh()
-    setShowCreate(false)
-    setNewName(''); setNewDesc(''); setNewEmoji('🚀'); setNewPlatforms([])
-    router.push(`/projects/${p.id}`)
+  const gDraft = useRef<Goal>({ id: '', title: '', target: 100, current: 0, unit: '', deadline: '' })
+  const rDraft = useRef<Rubric>({ id: '', name: '', color: C.accent, pct: 10, desc: '' })
+
+  function openGoal(g?: Goal) {
+    gDraft.current = g ? { ...g } : { id: '', title: '', target: 100, current: 0, unit: '', deadline: '' }
+    setGoalModal(g ?? 'new')
   }
-
-  function handleDelete(id:string) {
-    deleteProject(id); onRefresh(); setDeleteConfirm(null)
+  function saveGoal() {
+    const d = gDraft.current
+    if (!d.title) return
+    const goals = d.id
+      ? s.goals.map(g => g.id === d.id ? d : g)
+      : [...s.goals, { ...d, id: crypto.randomUUID() }]
+    save({ ...s, goals }); setGoalModal(null)
   }
+  function delGoal(id: string) { save({ ...s, goals: s.goals.filter(g => g.id !== id) }) }
 
-  function togglePlatform(pl:string) {
-    setNewPlatforms(prev=>prev.includes(pl)?prev.filter(x=>x!==pl):[...prev,pl])
+  function openRubric(r?: Rubric) {
+    rDraft.current = r ? { ...r } : { id: '', name: '', color: C.accent, pct: 10, desc: '' }
+    setRubricModal(r ?? 'new')
   }
+  function saveRubric() {
+    const d = rDraft.current
+    if (!d.name) return
+    const rubrics = d.id
+      ? s.rubrics.map(r => r.id === d.id ? d : r)
+      : [...s.rubrics, { ...d, id: crypto.randomUUID() }]
+    save({ ...s, rubrics }); setRubricModal(null)
+  }
+  function delRubric(id: string) { save({ ...s, rubrics: s.rubrics.filter(r => r.id !== id) }) }
 
   return (
-    <div style={{padding:'36px 44px',maxWidth:1100}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:28}}>
-        <div>
-          <h1 style={{color:'#e2e8f0',fontSize:24,fontWeight:700}}>Проєкти</h1>
-          <p style={{color:'#4b5563',fontSize:13,marginTop:2}}>{projects.length} проєктів</p>
-        </div>
-        <button onClick={()=>setShowCreate(true)}
-          style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer'}}>
-          <Plus size={16}/>Новий проєкт
-        </button>
-      </div>
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 40px' }}>
+      <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 32, color: C.text }}>Стратегія</h1>
 
-      {projects.length===0?(
-        <div style={{textAlign:'center',padding:'80px 20px'}}>
-          <p style={{color:'#374151',fontSize:16,marginBottom:12}}>Поки що немає проєктів</p>
-          <button onClick={()=>setShowCreate(true)}
-            style={{display:'inline-flex',alignItems:'center',gap:7,padding:'10px 20px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
-            <Plus size={15}/>Створити перший
-          </button>
+      {/* Goals */}
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Цілі</Hd>
+          <Btn sm onClick={() => openGoal()}><Plus size={14} />Додати</Btn>
         </div>
-      ):(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:18}}>
-          {projects.map(p=>{
-            const prog=getProgress(p.data)
-            const color=getProjectColor(p.id)
+        {s.goals.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Ще немає цілей. Додайте першу.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {s.goals.map(g => {
+            const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0
             return (
-              <div key={p.id} onClick={()=>router.push(`/projects/${p.id}`)}
-                style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:22,cursor:'pointer',transition:'border-color 0.15s,transform 0.1s'}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(59,130,246,0.3)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(255,255,255,0.06)';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
-                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
-                  <div style={{display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:12,backgroundColor:color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:15,fontWeight:700,flexShrink:0}}>
-                      {projectInitials(p.name)}
-                    </div>
-                    <div>
-                      <p style={{color:'#e2e8f0',fontSize:14,fontWeight:600,lineHeight:1.3}}>{p.name}</p>
-                      {p.description&&<p style={{color:'#4b5563',fontSize:12,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:160}}>{p.description}</p>}
-                    </div>
+              <div key={g.id} style={{ background: C.surf2, borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div>
+                    <span style={{ color: C.text, fontWeight: 600, fontSize: 15 }}>{g.title}</span>
+                    {g.deadline && <span style={{ color: C.muted, fontSize: 12, marginLeft: 10 }}>до {g.deadline}</span>}
                   </div>
-                  <button onClick={e=>{e.stopPropagation();setDeleteConfirm(p.id)}}
-                    style={{background:'none',border:'none',color:'#374151',cursor:'pointer',padding:4,borderRadius:6,flexShrink:0}}
-                    onMouseEnter={e=>(e.currentTarget.style.color='#ef4444')}
-                    onMouseLeave={e=>(e.currentTarget.style.color='#374151')}>
-                    <Trash2 size={14}/>
-                  </button>
-                </div>
-
-                {p.platforms.length>0&&(
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:12}}>
-                    {p.platforms.map(pl=>(
-                      <span key={pl} style={{fontSize:10,padding:'2px 8px',borderRadius:20,fontWeight:500,
-                        backgroundColor:PLATFORM_COLORS[pl]?PLATFORM_COLORS[pl]+'22':'rgba(255,255,255,0.07)',
-                        color:PLATFORM_COLORS[pl]||'#9ca3af',border:`1px solid ${PLATFORM_COLORS[pl]||'#374151'}44`}}>
-                        {pl}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-                    <span style={{color:'#4b5563',fontSize:11}}>Заповнено</span>
-                    <span style={{color:'#6b7280',fontSize:11,fontWeight:500}}>{prog}%</span>
-                  </div>
-                  <div style={{height:5,backgroundColor:'#0f1e30',borderRadius:3}}>
-                    <div style={{height:5,borderRadius:3,backgroundColor:color,width:`${prog}%`,transition:'width 0.4s'}}/>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => openGoal(g)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={14} /></button>
+                    <button onClick={() => delGoal(g.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={14} /></button>
                   </div>
                 </div>
-
-                <div style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <span style={{color:'#374151',fontSize:11}}>{new Date(p.updatedAt).toLocaleDateString('uk-UA')}</span>
-                  <span style={{color:prog===100?'#10b981':prog>50?'#f59e0b':'#6b7280',fontSize:11,fontWeight:500}}>
-                    {prog===100?'Готово':prog>50?'В роботі':'Початок'}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: C.accent, borderRadius: 3, transition: 'width 0.4s' }} />
+                  </div>
+                  <span style={{ color: C.accent, fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'right' }}>{pct}%</span>
+                  <span style={{ color: C.muted, fontSize: 12 }}>{g.current} / {g.target} {g.unit}</span>
                 </div>
               </div>
             )
           })}
         </div>
-      )}
+      </Card>
 
-      {/* Create modal */}
-      {showCreate&&(
-        <div style={{position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}}>
-          <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.08)',borderRadius:18,padding:28,width:480,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}}>
-              <h3 style={{color:'#e2e8f0',fontSize:17,fontWeight:600}}>Новий проєкт</h3>
-              <button onClick={()=>setShowCreate(false)} style={{background:'none',border:'none',color:'#4b5563',cursor:'pointer'}}><X size={18}/></button>
-            </div>
-
-            <div style={{marginBottom:14}}>
-              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Назва</p>
-              <input value={newName} onChange={e=>setNewName(e.target.value)}
-                placeholder="Назва проєкту"
-                style={{width:'100%',backgroundColor:'#0f1e30',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'10px 14px',color:'#e2e8f0',fontSize:14,outline:'none'}}/>
-            </div>
-
-            <div style={{marginBottom:14}}>
-              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Опис</p>
-              <textarea value={newDesc} onChange={e=>setNewDesc(e.target.value)}
-                placeholder="Короткий опис"
-                rows={2}
-                style={{width:'100%',backgroundColor:'#0f1e30',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'10px 14px',color:'#e2e8f0',fontSize:14,outline:'none',resize:'vertical',minHeight:60}}/>
-            </div>
-
-            <div style={{marginBottom:14}}>
-              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Емодзі</p>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {EMOJI_OPTIONS.map(em=>(
-                  <button key={em} onClick={()=>setNewEmoji(em)}
-                    style={{width:34,height:34,borderRadius:8,fontSize:16,border:'none',cursor:'pointer',
-                      backgroundColor:newEmoji===em?'rgba(37,99,235,0.3)':'rgba(255,255,255,0.04)',
-                      outline:newEmoji===em?'2px solid #3b82f6':'none'}}>
-                    {em}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{marginBottom:22}}>
-              <p style={{color:'#6b7280',fontSize:12,marginBottom:8}}>Платформи</p>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {PLATFORM_OPTIONS.map(pl=>{
-                  const sel=newPlatforms.includes(pl)
-                  const c=PLATFORM_COLORS[pl]||'#6b7280'
-                  return (
-                    <button key={pl} onClick={()=>togglePlatform(pl)}
-                      style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:500,cursor:'pointer',border:'none',transition:'all 0.12s',
-                        backgroundColor:sel?c+'33':'rgba(255,255,255,0.04)',
-                        color:sel?c:'#4b5563',
-                        outline:sel?`1px solid ${c}55`:'none'}}>
-                      {pl}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setShowCreate(false)}
-                style={{flex:1,padding:'10px',backgroundColor:'rgba(255,255,255,0.04)',color:'#9ca3af',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
-                Скасувати
-              </button>
-              <button onClick={handleCreate} disabled={!newName.trim()}
-                style={{flex:1,padding:'10px',backgroundColor:'#1d4ed8',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer',opacity:newName.trim()?1:0.4}}>
-                Створити
-              </button>
-            </div>
-          </div>
+      {/* Rubrics */}
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Рубрики контенту</Hd>
+          <Btn sm onClick={() => openRubric()}><Plus size={14} />Додати</Btn>
         </div>
-      )}
-
-      {/* Delete confirm */}
-      {deleteConfirm&&(()=>{const p=projects.find(x=>x.id===deleteConfirm);return p?(
-        <div style={{position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}}>
-          <div style={{backgroundColor:'#0c1524',border:'1px solid rgba(255,255,255,0.08)',borderRadius:18,padding:28,width:360}}>
-            <h3 style={{color:'#e2e8f0',fontSize:16,fontWeight:600,marginBottom:8}}>Видалити проєкт?</h3>
-            <p style={{color:'#6b7280',fontSize:13,marginBottom:22}}>«{p.name}» буде видалено назавжди.</p>
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setDeleteConfirm(null)}
-                style={{flex:1,padding:'10px',backgroundColor:'rgba(255,255,255,0.04)',color:'#9ca3af',border:'none',borderRadius:10,fontSize:14,cursor:'pointer'}}>
-                Скасувати
-              </button>
-              <button onClick={()=>handleDelete(deleteConfirm)}
-                style={{flex:1,padding:'10px',backgroundColor:'#dc2626',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer'}}>
-                Видалити
-              </button>
-            </div>
+        {s.rubrics.length > 0 && (
+          <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 18 }}>
+            {s.rubrics.map(r => (
+              <div key={r.id} style={{ flex: r.pct, background: r.color, minWidth: 4 }} title={`${r.name}: ${r.pct}%`} />
+            ))}
           </div>
+        )}
+        {s.rubrics.length === 0 && <p style={{ color: C.muted, fontSize: 14, marginBottom: 0 }}>Ще немає рубрик.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {s.rubrics.map(r => (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: r.color, flexShrink: 0 }} />
+              <span style={{ color: C.text, flex: 1, fontSize: 14 }}>{r.name}</span>
+              <span style={{ color: C.accent, fontWeight: 700, fontSize: 14, minWidth: 36 }}>{r.pct}%</span>
+              {r.desc && <span style={{ color: C.muted, fontSize: 12, flex: 2 }}>{r.desc}</span>}
+              <button onClick={() => openRubric(r)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={13} /></button>
+              <button onClick={() => delRubric(r.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={13} /></button>
+            </div>
+          ))}
         </div>
-      ):null})()}
+      </Card>
+
+      {/* Promotion */}
+      <Card>
+        <Hd>Стратегія просування</Hd>
+        <Field label="Платні канали" value={s.paid} onChange={v => save({ ...s, paid: v })} multiline rows={3} placeholder="Таргет, реклама, колаборації…" />
+        <Field label="Органічні канали" value={s.organic} onChange={v => save({ ...s, organic: v })} multiline rows={3} placeholder="SEO, reels, UGC, хештеги…" />
+        <Field label="Воронка продажів" value={s.funnel} onChange={v => save({ ...s, funnel: v })} multiline rows={3} placeholder="Шлях від підписника до клієнта" />
+      </Card>
+
+      {/* Goal modal */}
+      <Modal open={!!goalModal} onClose={() => setGoalModal(null)} title={gDraft.current.id ? 'Редагувати ціль' : 'Нова ціль'}>
+        <GoalForm draft={gDraft.current} onChange={d => { gDraft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+          <Btn variant="ghost" onClick={() => setGoalModal(null)}>Скасувати</Btn>
+          <Btn onClick={saveGoal}>Зберегти</Btn>
+        </div>
+      </Modal>
+
+      {/* Rubric modal */}
+      <Modal open={!!rubricModal} onClose={() => setRubricModal(null)} title={rDraft.current.id ? 'Редагувати рубрику' : 'Нова рубрика'}>
+        <RubricForm draft={rDraft.current} onChange={d => { rDraft.current = d }} colors={RUBRIC_COLORS} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+          <Btn variant="ghost" onClick={() => setRubricModal(null)}>Скасувати</Btn>
+          <Btn onClick={saveRubric}>Зберегти</Btn>
+        </div>
+      </Modal>
     </div>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function GoalForm({ draft, onChange }: { draft: Goal; onChange: (d: Goal) => void }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof Goal, v: string | number) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Назва цілі" value={d.title} onChange={v => u('title', v)} placeholder="Досягти 10К підписників" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px' }}>
+        <Field label="Поточне" value={String(d.current)} onChange={v => u('current', Number(v) || 0)} />
+        <Field label="Ціль" value={String(d.target)} onChange={v => u('target', Number(v) || 0)} />
+        <Field label="Одиниця" value={d.unit} onChange={v => u('unit', v)} placeholder="підп., грн…" />
+      </div>
+      <Field label="Дедлайн" value={d.deadline} onChange={v => u('deadline', v)} placeholder="2025-12-31" />
+    </div>
+  )
+}
 
-const NAV_STORAGE_KEY = 'smm_active_nav'
-const VALID_VIEWS: NavView[] = ['dashboard','projects','calendar','analytics']
+function RubricForm({ draft, onChange, colors }: { draft: Rubric; onChange: (d: Rubric) => void; colors: string[] }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof Rubric, v: string | number) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Назва рубрики" value={d.name} onChange={v => u('name', v)} placeholder="Експертний, розважальний…" />
+      <Field label="Відсоток (%" value={String(d.pct)} onChange={v => u('pct', Number(v) || 0)} />
+      <Field label="Опис" value={d.desc} onChange={v => u('desc', v)} placeholder="Про що ця рубрика?" />
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Колір</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {colors.map(c => (
+            <button key={c} onClick={() => u('color', c)} style={{ width: 28, height: 28, borderRadius: 6, background: c, border: d.color === c ? `3px solid ${C.text}` : '3px solid transparent', cursor: 'pointer' }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
-export default function HomePage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [nav, setNav] = useState<NavView>('dashboard')
-  const [importMsg, setImportMsg] = useState<string | null>(null)
+// ─── Calendar Section ─────────────────────────────────────────────────────────
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд']
+const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
+const PLATFORMS = ['Instagram', 'TikTok', 'Facebook', 'YouTube', 'LinkedIn', 'Інше']
+const FORMATS = ['Reels', 'Пост', 'Сторіс', 'Карусель', 'Live', 'Інше']
+const today = () => new Date().toISOString().slice(0, 10)
+
+function CalendarSection() {
+  const [events, setEvents] = useState<CalEvent[]>(() => ld(K.cal, []))
+  const [view, setView] = useState<'month' | 'week' | 'day'>('month')
+  const [vDate, setVDate] = useState(new Date())
+  const [modal, setModal] = useState<CalEvent | null | 'new'>(null)
+  const [prefill, setPrefill] = useState<Partial<CalEvent>>({})
+  const draft = useRef<CalEvent>({ id: '', title: '', date: today(), time: '', type: 'task', platform: '', format: '', notes: '' })
+
+  const save = (next: CalEvent[]) => { setEvents(next); sv(K.cal, next) }
+
+  function openNew(date?: string) {
+    draft.current = { id: '', title: '', date: date ?? today(), time: '', type: 'task', platform: '', format: '', notes: '' }
+    setPrefill(date ? { date } : {})
+    setModal('new')
+  }
+  function openEdit(e: CalEvent) { draft.current = { ...e }; setModal(e) }
+  function saveEvent() {
+    const d = draft.current
+    if (!d.title) return
+    const next = d.id ? events.map(e => e.id === d.id ? d : e) : [...events, { ...d, id: crypto.randomUUID() }]
+    save(next); setModal(null)
+  }
+  function delEvent(id: string) { save(events.filter(e => e.id !== id)) }
+
+  function eventStatus(e: CalEvent) {
+    if (e.type !== 'publication') return null
+    const t = today()
+    if (e.date > t) return null
+    const diffH = (Date.now() - new Date(e.date).getTime()) / 3600000
+    if (diffH >= 24) return 'analytics'
+    return 'published'
+  }
+
+  const navPrev = () => {
+    const d = new Date(vDate)
+    if (view === 'month') d.setMonth(d.getMonth() - 1)
+    else if (view === 'week') d.setDate(d.getDate() - 7)
+    else d.setDate(d.getDate() - 1)
+    setVDate(d)
+  }
+  const navNext = () => {
+    const d = new Date(vDate)
+    if (view === 'month') d.setMonth(d.getMonth() + 1)
+    else if (view === 'week') d.setDate(d.getDate() + 7)
+    else d.setDate(d.getDate() + 1)
+    setVDate(d)
+  }
+
+  function monthDays(): (string | null)[] {
+    const y = vDate.getFullYear(), m = vDate.getMonth()
+    const first = new Date(y, m, 1)
+    const startDow = (first.getDay() + 6) % 7
+    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    const cells: (string | null)[] = Array(startDow).fill(null)
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push(`${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    }
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  }
+
+  function weekDays(): string[] {
+    const d = new Date(vDate)
+    const dow = (d.getDay() + 6) % 7
+    d.setDate(d.getDate() - dow)
+    return Array.from({ length: 7 }, (_, i) => {
+      const dd = new Date(d); dd.setDate(dd.getDate() + i)
+      return dd.toISOString().slice(0, 10)
+    })
+  }
+
+  function fmtLabel() {
+    if (view === 'month') return `${MONTHS_UK[vDate.getMonth()]} ${vDate.getFullYear()}`
+    if (view === 'week') {
+      const days = weekDays()
+      return `${days[0].slice(8)}.${days[0].slice(5, 7)} — ${days[6].slice(8)}.${days[6].slice(5, 7)}`
+    }
+    return `${vDate.getDate()} ${MONTHS_UK[vDate.getMonth()]} ${vDate.getFullYear()}`
+  }
+
+  function EventPill({ e }: { e: CalEvent }) {
+    const st = eventStatus(e)
+    const isTask = e.type === 'task'
+    return (
+      <div style={{ background: isTask ? 'rgba(96,147,93,0.25)' : 'rgba(200,217,111,0.18)', borderLeft: `3px solid ${isTask ? C.green : C.accent}`, borderRadius: 5, padding: '3px 7px', marginBottom: 3, cursor: 'pointer', fontSize: 11 }}
+        onClick={ev => { ev.stopPropagation(); openEdit(e) }}>
+        <div style={{ color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
+        {st === 'analytics' && <div style={{ color: '#fbbf24', fontSize: 10, display: 'flex', alignItems: 'center', gap: 3 }}><AlertCircle size={9} />Аналітика</div>}
+        {st === 'published' && <div style={{ color: C.green, fontSize: 10 }}>✓ Опубліковано</div>}
+      </div>
+    )
+  }
+
+  const viewDateStr = vDate.toISOString().slice(0, 10)
+
+  return (
+    <div style={{ padding: '40px 40px', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, color: C.text }}>Календар</h1>
+        <Btn onClick={() => openNew()}><Plus size={15} />Подія</Btn>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['month', 'week', 'day'] as const).map(v => (
+            <button key={v} onClick={() => setView(v)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: view === v ? 600 : 400, background: view === v ? C.accent : C.surf2, color: view === v ? C.surf : C.muted }}>
+              {v === 'month' ? 'Місяць' : v === 'week' ? 'Тиждень' : 'День'}
+            </button>
+          ))}
+        </div>
+        <button onClick={navPrev} style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', color: C.text, cursor: 'pointer' }}><ChevronLeft size={16} /></button>
+        <span style={{ color: C.text, fontWeight: 600, fontSize: 15, minWidth: 180, textAlign: 'center' }}>{fmtLabel()}</span>
+        <button onClick={navNext} style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', color: C.text, cursor: 'pointer' }}><ChevronRight size={16} /></button>
+      </div>
+
+      {/* Month view */}
+      {view === 'month' && (
+        <div style={{ background: C.surf, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: `1px solid ${C.border}` }}>
+            {WEEKDAYS.map(d => <div key={d} style={{ padding: '10px 0', textAlign: 'center', color: C.muted, fontSize: 12, fontWeight: 600 }}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
+            {monthDays().map((date, i) => {
+              const dayEvents = date ? events.filter(e => e.date === date) : []
+              const isToday = date === today()
+              return (
+                <div key={i} onClick={() => date && openNew(date)}
+                  style={{ minHeight: 90, padding: '8px 8px 6px', borderRight: (i + 1) % 7 !== 0 ? `1px solid ${C.border}` : 'none', borderBottom: `1px solid ${C.border}`, cursor: date ? 'pointer' : 'default', background: date ? 'transparent' : 'rgba(0,0,0,0.1)' }}>
+                  {date && (
+                    <>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: isToday ? C.accent : 'transparent', color: isToday ? C.surf : C.muted, fontSize: 12, fontWeight: isToday ? 700 : 400, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                        {Number(date.slice(8))}
+                      </div>
+                      {dayEvents.slice(0, 3).map(e => <EventPill key={e.id} e={e} />)}
+                      {dayEvents.length > 3 && <div style={{ color: C.muted, fontSize: 10 }}>+{dayEvents.length - 3}</div>}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Week view */}
+      {view === 'week' && (
+        <div style={{ background: C.surf, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
+            {weekDays().map((date, i) => {
+              const dayEvents = events.filter(e => e.date === date)
+              const isToday = date === today()
+              const dd = Number(date.slice(8))
+              return (
+                <div key={date} onClick={() => openNew(date)}
+                  style={{ minHeight: 180, padding: '10px 8px', borderRight: i < 6 ? `1px solid ${C.border}` : 'none', cursor: 'pointer' }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{WEEKDAYS[i]}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: isToday ? C.accent : 'transparent', color: isToday ? C.surf : C.text, fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>{dd}</div>
+                  {dayEvents.map(e => <EventPill key={e.id} e={e} />)}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Day view */}
+      {view === 'day' && (
+        <div style={{ background: C.surf, borderRadius: 14, border: `1px solid ${C.border}`, padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+            <Btn sm onClick={() => openNew(viewDateStr)}><Plus size={13} />Додати</Btn>
+          </div>
+          {events.filter(e => e.date === viewDateStr).length === 0
+            ? <p style={{ color: C.muted, fontSize: 14 }}>Немає подій. Натисніть + щоб додати.</p>
+            : events.filter(e => e.date === viewDateStr).sort((a, b) => a.time.localeCompare(b.time)).map(e => (
+              <div key={e.id} style={{ background: C.surf2, borderRadius: 10, padding: '12px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ color: C.muted, fontSize: 13, minWidth: 40 }}>{e.time || '–'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: C.text, fontWeight: 600 }}>{e.title}</div>
+                  {e.platform && <div style={{ color: C.muted, fontSize: 12 }}>{e.platform} {e.format && `· ${e.format}`}</div>}
+                  {eventStatus(e) === 'analytics' && <div style={{ color: '#fbbf24', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}><AlertCircle size={12} />Заповни аналітику</div>}
+                </div>
+                <button onClick={() => openEdit(e)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={14} /></button>
+                <button onClick={() => delEvent(e.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={14} /></button>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* Event modal */}
+      <Modal open={!!modal} onClose={() => setModal(null)} title={draft.current.id ? 'Редагувати подію' : 'Нова подія'}>
+        <EventForm draft={draft.current} onChange={d => { draft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+          <div>
+            {draft.current.id && <Btn variant="danger" sm onClick={() => { delEvent(draft.current.id); setModal(null) }}><Trash2 size={13} />Видалити</Btn>}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setModal(null)}>Скасувати</Btn>
+            <Btn onClick={saveEvent}>Зберегти</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+function EventForm({ draft, onChange }: { draft: CalEvent; onChange: (d: CalEvent) => void }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof CalEvent, v: string) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Назва" value={d.title} onChange={v => u('title', v)} placeholder="Що публікуємо / що робимо?" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <Field label="Дата" value={d.date} onChange={v => u('date', v)} placeholder="РРРР-ММ-ДД" />
+        <Field label="Час" value={d.time} onChange={v => u('time', v)} placeholder="ГГ:ХХ" />
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Тип</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['task', 'publication'] as CalEventType[]).map(t => (
+            <button key={t} onClick={() => u('type', t)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600, background: d.type === t ? C.accent : C.surf2, color: d.type === t ? C.surf : C.muted }}>
+              {t === 'task' ? 'Задача' : 'Публікація'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {d.type === 'publication' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Платформа</label>
+            <select value={d.platform} onChange={e => u('platform', e.target.value)} style={{ ...inputStyle, height: 40 }}>
+              <option value="">Оберіть…</option>
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Формат</label>
+            <select value={d.format} onChange={e => u('format', e.target.value)} style={{ ...inputStyle, height: 40 }}>
+              <option value="">Оберіть…</option>
+              {FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+      <Field label="Нотатки" value={d.notes} onChange={v => u('notes', v)} multiline rows={3} />
+    </div>
+  )
+}
+
+// ─── Analytics Section ────────────────────────────────────────────────────────
+const POST_FIELDS: { key: keyof PostData; label: string }[] = [
+  { key: 'reach', label: 'Охоплення' }, { key: 'views', label: 'Перегляди' },
+  { key: 'likes', label: 'Лайки' }, { key: 'comments', label: 'Коментарі' },
+  { key: 'saves', label: 'Збереження' }, { key: 'shares', label: 'Поширення' },
+  { key: 'er', label: 'ER%' },
+]
+
+const MONTHS_SHORT = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру']
+
+function AnalyticsSection() {
+  const [posts, setPosts] = useState<PostData[]>(() => ld(K.posts, []))
+  const [subs, setSubs] = useState<SubEntry[]>(() => ld(K.subs, []))
+  const [postModal, setPostModal] = useState<PostData | null | 'new'>(null)
+  const [subModal, setSubModal] = useState(false)
+  const [agg, setAgg] = useState<'month' | 'quarter' | 'year'>('month')
+  const pDraft = useRef<PostData>({ id: '', date: today(), platform: '', format: '', title: '', reach: '', views: '', likes: '', comments: '', saves: '', shares: '', er: '', notes: '' })
+  const sDraft = useRef<SubEntry>({ id: '', date: today(), count: '' })
+
+  const savePosts = (next: PostData[]) => { setPosts(next); sv(K.posts, next) }
+  const saveSubs = (next: SubEntry[]) => { setSubs(next); sv(K.subs, next) }
+
+  function openPost(p?: PostData) {
+    pDraft.current = p ? { ...p } : { id: '', date: today(), platform: '', format: '', title: '', reach: '', views: '', likes: '', comments: '', saves: '', shares: '', er: '', notes: '' }
+    setPostModal(p ?? 'new')
+  }
+  function savePost() {
+    const d = pDraft.current
+    if (!d.date) return
+    const next = d.id ? posts.map(p => p.id === d.id ? d : p) : [...posts, { ...d, id: crypto.randomUUID() }]
+    savePosts(next); setPostModal(null)
+  }
+  function delPost(id: string) { savePosts(posts.filter(p => p.id !== id)) }
+
+  function saveSub() {
+    const d = sDraft.current
+    if (!d.date || !d.count) return
+    saveSubs([...subs, { ...d, id: crypto.randomUUID() }].sort((a, b) => b.date.localeCompare(a.date)))
+    setSubModal(false)
+  }
+
+  function aggKey(date: string) {
+    const [y, m] = date.split('-')
+    if (agg === 'year') return y
+    if (agg === 'quarter') return `${y} Q${Math.ceil(Number(m) / 3)}`
+    return `${MONTHS_SHORT[Number(m) - 1]} ${y}`
+  }
+
+  const grouped: Record<string, PostData[]> = {}
+  posts.forEach(p => {
+    const k = aggKey(p.date)
+    if (!grouped[k]) grouped[k] = []
+    grouped[k].push(p)
+  })
+
+  const totalReach = posts.reduce((s, p) => s + (Number(p.reach) || 0), 0)
+  const avgER = posts.length ? (posts.reduce((s, p) => s + (parseFloat(p.er) || 0), 0) / posts.length).toFixed(2) : '0'
+
+  return (
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '40px 40px' }}>
+      <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 28, color: C.text }}>Аналітика</h1>
+
+      {/* Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 28 }}>
+        {[['Публікацій', posts.length], ['Заг. охоплення', totalReach.toLocaleString('uk')], ['Середній ER', avgER + '%']].map(([l, v]) => (
+          <Card key={String(l)}>
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{l}</div>
+            <div style={{ color: C.accent, fontFamily: 'var(--font-head)', fontSize: 28, fontWeight: 700 }}>{v}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Posts */}
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Публікації</Hd>
+          <Btn sm onClick={() => openPost()}><Plus size={14} />Додати</Btn>
+        </div>
+        {posts.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Ще немає записів.</p>}
+        <div style={{ overflowX: 'auto' }}>
+          {posts.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {['Дата', 'Платформа', 'Формат', 'Назва', 'Охоплення', 'ER%', ''].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...posts].sort((a, b) => b.date.localeCompare(a.date)).map(p => (
+                  <tr key={p.id} style={{ borderBottom: `1px solid ${C.dim}` }}>
+                    <td style={{ padding: '9px 10px', color: C.muted, whiteSpace: 'nowrap' }}>{p.date}</td>
+                    <td style={{ padding: '9px 10px', color: C.text }}>{p.platform}</td>
+                    <td style={{ padding: '9px 10px', color: C.muted }}>{p.format}</td>
+                    <td style={{ padding: '9px 10px', color: C.text, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</td>
+                    <td style={{ padding: '9px 10px', color: C.text }}>{p.reach ? Number(p.reach).toLocaleString('uk') : '–'}</td>
+                    <td style={{ padding: '9px 10px', color: C.accent, fontWeight: 700 }}>{p.er || '–'}</td>
+                    <td style={{ padding: '9px 10px', display: 'flex', gap: 8 }}>
+                      <button onClick={() => openPost(p)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer' }}><Edit2 size={13} /></button>
+                      <button onClick={() => delPost(p.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Card>
+
+      {/* Subscribers */}
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Підписники</Hd>
+          <Btn sm onClick={() => setSubModal(true)}><Plus size={14} />Запис</Btn>
+        </div>
+        {subs.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Додай кількість підписників раз на тиждень.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {subs.slice(0, 12).map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: C.surf2, borderRadius: 8 }}>
+              <span style={{ color: C.muted, fontSize: 13 }}>{s.date}</span>
+              <span style={{ color: C.accent, fontWeight: 700, fontSize: 18, fontFamily: 'var(--font-head)' }}>{Number(s.count).toLocaleString('uk')}</span>
+              <button onClick={() => saveSubs(subs.filter(e => e.id !== s.id))} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer' }}><Trash2 size={13} /></button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Aggregation */}
+      {posts.length > 0 && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <Hd>Зведення</Hd>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {(['month', 'quarter', 'year'] as const).map(a => (
+                <button key={a} onClick={() => setAgg(a)} style={{ padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)', fontWeight: 600, background: agg === a ? C.accent : C.surf2, color: agg === a ? C.surf : C.muted }}>
+                  {a === 'month' ? 'Місяць' : a === 'quarter' ? 'Квартал' : 'Рік'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {['Період', 'Постів', 'Охоплення', 'Перегляди', 'Лайки', 'Коментарі', 'ER%'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).map(([k, ps]) => {
+                  const sum = (f: keyof PostData) => ps.reduce((s, p) => s + (Number(p[f]) || 0), 0)
+                  const er = ps.length ? (ps.reduce((s, p) => s + (parseFloat(p.er) || 0), 0) / ps.length).toFixed(2) : '–'
+                  return (
+                    <tr key={k} style={{ borderBottom: `1px solid ${C.dim}` }}>
+                      <td style={{ padding: '9px 10px', color: C.text, fontWeight: 600 }}>{k}</td>
+                      <td style={{ padding: '9px 10px', color: C.muted }}>{ps.length}</td>
+                      <td style={{ padding: '9px 10px', color: C.text }}>{sum('reach').toLocaleString('uk')}</td>
+                      <td style={{ padding: '9px 10px', color: C.text }}>{sum('views').toLocaleString('uk')}</td>
+                      <td style={{ padding: '9px 10px', color: C.text }}>{sum('likes').toLocaleString('uk')}</td>
+                      <td style={{ padding: '9px 10px', color: C.text }}>{sum('comments').toLocaleString('uk')}</td>
+                      <td style={{ padding: '9px 10px', color: C.accent, fontWeight: 700 }}>{er}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Post modal */}
+      <Modal open={!!postModal} onClose={() => setPostModal(null)} title={pDraft.current.id ? 'Редагувати публікацію' : 'Нова публікація'} wide>
+        <PostForm draft={pDraft.current} onChange={d => { pDraft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+          <div>{pDraft.current.id && <Btn variant="danger" sm onClick={() => { delPost(pDraft.current.id); setPostModal(null) }}><Trash2 size={13} />Видалити</Btn>}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setPostModal(null)}>Скасувати</Btn>
+            <Btn onClick={savePost}>Зберегти</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Sub modal */}
+      <Modal open={subModal} onClose={() => setSubModal(false)} title="Кількість підписників">
+        <SubForm draft={sDraft.current} onChange={d => { sDraft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+          <Btn variant="ghost" onClick={() => setSubModal(false)}>Скасувати</Btn>
+          <Btn onClick={saveSub}>Зберегти</Btn>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+function PostForm({ draft, onChange }: { draft: PostData; onChange: (d: PostData) => void }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof PostData, v: string) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Назва / опис" value={d.title} onChange={v => u('title', v)} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px' }}>
+        <Field label="Дата" value={d.date} onChange={v => u('date', v)} placeholder="РРРР-ММ-ДД" />
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Платформа</label>
+          <select value={d.platform} onChange={e => u('platform', e.target.value)} style={{ ...inputStyle, height: 40 }}>
+            <option value="">Оберіть…</option>
+            {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Формат</label>
+          <select value={d.format} onChange={e => u('format', e.target.value)} style={{ ...inputStyle, height: 40 }}>
+            <option value="">Оберіть…</option>
+            {FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0 16px' }}>
+        {POST_FIELDS.map(({ key, label }) => (
+          <Field key={key} label={label} value={d[key]} onChange={v => u(key, v)} />
+        ))}
+      </div>
+      <Field label="Нотатки" value={d.notes} onChange={v => u('notes', v)} multiline rows={2} />
+    </div>
+  )
+}
+
+function SubForm({ draft, onChange }: { draft: SubEntry; onChange: (d: SubEntry) => void }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof SubEntry, v: string) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Дата" value={d.date} onChange={v => u('date', v)} placeholder="РРРР-ММ-ДД" />
+      <Field label="Кількість підписників" value={d.count} onChange={v => u('count', v)} placeholder="10000" />
+    </div>
+  )
+}
+
+// ─── Clients Section ──────────────────────────────────────────────────────────
+const STATUS_LABELS: Record<ClientStatus, string> = { active: 'Активний', paused: 'Пауза', ended: 'Завершено' }
+const STATUS_COLORS: Record<ClientStatus, string> = { active: C.accent, paused: '#fbbf24', ended: C.muted }
+
+function ClientsSection() {
+  const [clients, setClients] = useState<Client[]>(() => ld(K.clients, []))
+  const [modal, setModal] = useState<Client | null | 'new'>(null)
+  const [filter, setFilter] = useState<ClientStatus | 'all'>('all')
+  const draft = useRef<Client>({ id: '', name: '', niche: '', pkg: '', status: 'active', start: '', notes: '' })
+
+  const save = (next: Client[]) => { setClients(next); sv(K.clients, next) }
+
+  function openClient(c?: Client) {
+    draft.current = c ? { ...c } : { id: '', name: '', niche: '', pkg: '', status: 'active', start: '', notes: '' }
+    setModal(c ?? 'new')
+  }
+  function saveClient() {
+    const d = draft.current
+    if (!d.name) return
+    const next = d.id ? clients.map(c => c.id === d.id ? d : c) : [...clients, { ...d, id: crypto.randomUUID() }]
+    save(next); setModal(null)
+  }
+  function delClient(id: string) { save(clients.filter(c => c.id !== id)) }
+
+  const visible = filter === 'all' ? clients : clients.filter(c => c.status === filter)
+
+  return (
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '40px 40px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, color: C.text }}>Клієнти</h1>
+        <Btn onClick={() => openClient()}><Plus size={15} />Новий клієнт</Btn>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
+        {(['all', 'active', 'paused', 'ended'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600, background: filter === f ? C.accent : C.surf, color: filter === f ? C.surf : C.muted, border: `1px solid ${C.border}` as string }}>
+            {f === 'all' ? 'Всі' : STATUS_LABELS[f]}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Немає клієнтів у цій категорії.</p>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+        {visible.map(c => (
+          <Card key={c.id}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <div style={{ color: C.text, fontWeight: 700, fontSize: 16 }}>{c.name}</div>
+                {c.niche && <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{c.niche}</div>}
+              </div>
+              <span style={{ background: `rgba(0,0,0,0.25)`, color: STATUS_COLORS[c.status], fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: `1px solid ${STATUS_COLORS[c.status]}40`, whiteSpace: 'nowrap' }}>
+                {STATUS_LABELS[c.status]}
+              </span>
+            </div>
+            {c.pkg && <div style={{ color: C.muted, fontSize: 13, marginBottom: 8 }}>📦 {c.pkg}</div>}
+            {c.start && <div style={{ color: C.dim, fontSize: 12, marginBottom: 8 }}>З {c.start}</div>}
+            {c.notes && <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.5, marginBottom: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>{c.notes}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <Btn sm variant="ghost" onClick={() => openClient(c)}><Edit2 size={13} />Редагувати</Btn>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={draft.current.id ? 'Редагувати клієнта' : 'Новий клієнт'}>
+        <ClientForm draft={draft.current} onChange={d => { draft.current = d }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+          <div>{draft.current.id && <Btn variant="danger" sm onClick={() => { delClient(draft.current.id); setModal(null) }}><Trash2 size={13} />Видалити</Btn>}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setModal(null)}>Скасувати</Btn>
+            <Btn onClick={saveClient}>Зберегти</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+function ClientForm({ draft, onChange }: { draft: Client; onChange: (d: Client) => void }) {
+  const [d, setD] = useState(draft)
+  const u = (f: keyof Client, v: string) => { const next = { ...d, [f]: v }; setD(next); onChange(next) }
+  return (
+    <div>
+      <Field label="Ім'я / Назва" value={d.name} onChange={v => u('name', v)} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <Field label="Ніша" value={d.niche} onChange={v => u('niche', v)} placeholder="Краса, фітнес…" />
+        <Field label="Пакет" value={d.pkg} onChange={v => u('pkg', v)} placeholder="Базовий, Про…" />
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ display: 'block', color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Статус</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['active', 'paused', 'ended'] as ClientStatus[]).map(st => (
+            <button key={st} onClick={() => u('status', st)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600, background: d.status === st ? STATUS_COLORS[st] : C.surf2, color: d.status === st ? C.surf : C.muted }}>
+              {STATUS_LABELS[st]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Field label="Початок співпраці" value={d.start} onChange={v => u('start', v)} placeholder="РРРР-ММ-ДД" />
+      <Field label="Нотатки" value={d.notes} onChange={v => u('notes', v)} multiline rows={4} />
+    </div>
+  )
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [section, setSection] = useState<Section>(() => {
+    if (typeof window === 'undefined') return 'profile'
+    return (localStorage.getItem(K.nav) as Section) ?? 'profile'
+  })
+  const [toast, setToast] = useState<string | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    setProjects(getProjects())
-    const saved = localStorage.getItem(NAV_STORAGE_KEY) as NavView | null
-    if (saved && VALID_VIEWS.includes(saved)) setNav(saved)
-  }, [])
+  const navigate = (s: Section) => { setSection(s); localStorage.setItem(K.nav, s) }
 
-  function refresh(){setProjects(getProjects())}
-  function navigate(v: NavView) { setNav(v); localStorage.setItem(NAV_STORAGE_KEY, v) }
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
-  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      const result = importAllData(text)
-      if (result.ok) {
-        refresh()
-        setImportMsg('Дані відновлено успішно!')
-      } else {
-        setImportMsg(result.error ?? 'Помилка')
-      }
-      setTimeout(() => setImportMsg(null), 3000)
+    const r = new FileReader()
+    r.onload = ev => {
+      const res = importBackup(ev.target?.result as string)
+      showToast(res.ok ? 'Дані відновлено!' : res.error ?? 'Помилка')
     }
-    reader.readAsText(file)
+    r.readAsText(file)
     e.target.value = ''
   }
 
   return (
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',backgroundColor:'#070d1a'}}>
-      <input ref={importRef} type="file" accept=".json" style={{display:'none'}} onChange={handleImportFile}/>
-      {importMsg && (
-        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:9999,backgroundColor:'#1e293b',color:'#e2e8f0',padding:'12px 24px',borderRadius:12,fontSize:14,boxShadow:'0 4px 24px rgba(0,0,0,0.5)',border:'1px solid rgba(255,255,255,0.1)'}}>
-          {importMsg}
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#0A1E14' }}>
+      <input ref={importRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 999, background: C.surf, color: C.text, padding: '12px 24px', borderRadius: 12, fontSize: 14, boxShadow: '0 4px 24px rgba(0,0,0,0.5)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Check size={16} color={C.accent} />{toast}
         </div>
       )}
-      <Sidebar active={nav} onNav={navigate} projects={projects} onImport={() => importRef.current?.click()}/>
-      <main style={{flex:1,overflowY:'auto',backgroundColor:'#070d1a'}}>
-        {nav==='dashboard'&&<DashboardView projects={projects} onNavigate={navigate}/>}
-        {nav==='projects'&&<ProjectsView projects={projects} onRefresh={refresh}/>}
-        {nav==='calendar'&&<div style={{padding:'36px 44px'}}><CalendarView projects={projects}/></div>}
-        {nav==='analytics'&&<div style={{padding:'36px 44px'}}><AnalyticsView projects={projects} onUpdate={refresh}/></div>}
+      <Sidebar active={section} onChange={navigate} onExport={exportBackup} onImport={() => importRef.current?.click()} />
+      <main style={{ flex: 1, overflowY: 'auto', background: '#0A1E14' }}>
+        {section === 'profile' && <ProfileSection />}
+        {section === 'strategy' && <StrategySection />}
+        {section === 'calendar' && <CalendarSection />}
+        {section === 'analytics' && <AnalyticsSection />}
+        {section === 'clients' && <ClientsSection />}
       </main>
     </div>
   )

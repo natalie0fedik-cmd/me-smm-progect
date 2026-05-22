@@ -1,122 +1,88 @@
-export type CalendarEventType = 'meeting' | 'planning' | 'shoot' | 'publish' | 'other'
+export interface BrandProfile {
+  brandName: string
+  tagline: string
+  niche: string
+  mission: string
+  vision: string
+  values: string
+  audience: string
+  uvp: string
+  toneOfVoice: string
+  instagram: string
+  tiktok: string
+  facebook: string
+  youtube: string
+  website: string
+}
 
-export interface CalendarEvent {
+export interface Goal {
   id: string
   title: string
-  date: string        // "YYYY-MM-DD"
-  time: string        // "HH:MM" or ""
-  type: CalendarEventType
-  projectId: string   // "" = no project
-  notes: string
+  target: number
+  current: number
+  unit: string
+  deadline: string
 }
 
-export interface PostMetric {
-  id: string
-  projectId: string
-  date: string          // "YYYY-MM-DD"
-  platform: string      // "Instagram", "TikTok", etc.
-  format: string        // "Рілс", "Пост", "Сторіс", etc.
-  category: string      // "Експертний", "Розважальний", etc.
-  title: string         // short post description (optional)
-  metrics: Record<string, string>  // "Охоплення": "12400", "ER%": "3.5", …
-  notes: string
-}
-
-export interface ProjectData {
-  // 1. ХТО МИ — structured fields
-  companyName: string
-  companyIndustry: string
-  companyYear: string
-  companyGeo: string
-  companyTeam: string
-  companyProducts: string
-
-  // 2. ЦІЛІ
-  goals: string
-
-  // 3. ЗАДАЧІ
-  tasks: string
-
-  // 4. АНАЛІТИКА
-  analytics: string
-  competitorAnalysis: string
-
-  // 5. ПОЗИЦІЮВАННЯ БРЕНДУ
-  brandMission: string
-  brandVision: string
-  brandValues: string
-  brandArchetypes: string
-  brandEnemies: string
-  communicationPillars: string
-
-  // 6. УЦП
-  uvp: string
-
-  // 7. КОНТЕНТ-СТРАТЕГІЯ
-  unifyingIdea: string
-  toneOfVoice: string
-  contentRubricator: string
-  visualConcept: string
-
-  // 8. СТРАТЕГІЯ ПРОСУВАННЯ
-  paidTools: string
-  organicTools: string
-  salesFunnels: string
-
-  // 9. БІО ПРОФІЛЮ ТА HIGHLIGHTS
-  bioStructure: string
-  highlights: string
-
-  // 10. КРІ ТА МЕТРИКИ
-  kpi: string
-
-  // 11. ЕТАПИ РЕАЛІЗАЦІЇ
-  implementationStages: string
-
-  // 12. АНАЛІТИКА / ЩОМІСЯЧНІ ЗВІТИ
-  monthlyReports: string
-}
-
-export interface Project {
+export interface Rubric {
   id: string
   name: string
-  emoji: string
-  description: string
-  platforms: string[]
-  createdAt: string
-  updatedAt: string
-  data: ProjectData
+  color: string
+  pct: number
+  desc: string
 }
 
-export const EMPTY_PROJECT_DATA: ProjectData = {
-  companyName: '',
-  companyIndustry: '',
-  companyYear: '',
-  companyGeo: '',
-  companyTeam: '',
-  companyProducts: '',
-  goals: '',
-  tasks: '',
-  analytics: '',
-  competitorAnalysis: '',
-  brandMission: '',
-  brandVision: '',
-  brandValues: '',
-  brandArchetypes: '',
-  brandEnemies: '',
-  communicationPillars: '',
-  uvp: '',
-  unifyingIdea: '',
-  toneOfVoice: '',
-  contentRubricator: '',
-  visualConcept: '',
-  paidTools: '',
-  organicTools: '',
-  salesFunnels: '',
-  bioStructure: '',
-  highlights: '',
-  kpi: '',
-  implementationStages: '',
-  monthlyReports: '',
+export interface StrategyData {
+  goals: Goal[]
+  rubrics: Rubric[]
+  paid: string
+  organic: string
+  funnel: string
 }
 
+export type CalEventType = 'task' | 'publication'
+
+export interface CalEvent {
+  id: string
+  title: string
+  date: string
+  time: string
+  type: CalEventType
+  platform: string
+  format: string
+  notes: string
+}
+
+export interface PostData {
+  id: string
+  date: string
+  platform: string
+  format: string
+  title: string
+  reach: string
+  views: string
+  likes: string
+  comments: string
+  saves: string
+  shares: string
+  er: string
+  notes: string
+}
+
+export interface SubEntry {
+  id: string
+  date: string
+  count: string
+}
+
+export type ClientStatus = 'active' | 'paused' | 'ended'
+
+export interface Client {
+  id: string
+  name: string
+  niche: string
+  pkg: string
+  status: ClientStatus
+  start: string
+  notes: string
+}
