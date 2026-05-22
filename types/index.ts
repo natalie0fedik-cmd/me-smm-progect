@@ -1,18 +1,38 @@
 export interface BrandProfile {
+  // 1. Хто я
   brandName: string
-  tagline: string
-  niche: string
+  services: string
+  geography: string
+  prices: string
+
+  // 2. Місія, візія, цінності
   mission: string
   vision: string
   values: string
-  audience: string
+
+  // 3. Архетипи, вороги, кити
+  archetypes: string
+  enemies: string
+  pillars: string
+
+  // 4. УЦП і ключовий меседж
   uvp: string
+  keyMessage: string
+
+  // 5. Tone of Voice
   toneOfVoice: string
+
+  // 6. БІО профілю і хайлайтси
+  bioProfile: string
+  highlights: string
   instagram: string
   tiktok: string
   facebook: string
   youtube: string
   website: string
+
+  // 7. Конкуренти (JSON: Competitor[])
+  competitors: string
 }
 
 export interface Goal {
@@ -85,4 +105,12 @@ export interface Client {
   status: ClientStatus
   start: string
   notes: string
+}
+
+export interface Competitor {
+  id: string
+  name: string
+  strengths: string
+  weaknesses: string
+  diff: string
 }

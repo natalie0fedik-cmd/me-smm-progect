@@ -24,9 +24,14 @@ export const sv = (key: string, val: unknown) =>
   localStorage.setItem(key, JSON.stringify(val))
 
 export const DP: BrandProfile = {
-  brandName: '', tagline: '', niche: '', mission: '', vision: '',
-  values: '', audience: '', uvp: '', toneOfVoice: '',
+  brandName: '', services: '', geography: '', prices: '',
+  mission: '', vision: '', values: '',
+  archetypes: '', enemies: '', pillars: '',
+  uvp: '', keyMessage: '',
+  toneOfVoice: '',
+  bioProfile: '', highlights: '',
   instagram: '', tiktok: '', facebook: '', youtube: '', website: '',
+  competitors: '[]',
 }
 
 export const DS: StrategyData = {

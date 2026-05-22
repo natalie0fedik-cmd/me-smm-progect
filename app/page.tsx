@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { User, Target, CalendarDays, BarChart2, Users, Download, Upload, Plus, X, Edit2, Trash2, ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react'
-import type { BrandProfile, StrategyData, Goal, Rubric, CalEvent, CalEventType, PostData, SubEntry, Client, ClientStatus } from '@/types'
+import type { BrandProfile, StrategyData, Goal, Rubric, CalEvent, CalEventType, PostData, SubEntry, Client, ClientStatus, Competitor } from '@/types'
 import { K, ld, sv, DP, DS, exportBackup, importBackup } from '@/lib/storage'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -127,43 +127,104 @@ function Sidebar({ active, onChange, onExport, onImport }: {
 }
 
 // ─── Profile Section ──────────────────────────────────────────────────────────
+function parseCompetitors(raw: string): Competitor[] {
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
 function ProfileSection() {
   const [p, setP] = useState<BrandProfile>(() => ld(K.prof, DP))
   const u = (f: keyof BrandProfile) => (v: string) => {
     const next = { ...p, [f]: v }
     setP(next); sv(K.prof, next)
   }
+
+  const competitors = parseCompetitors(p.competitors)
+  const saveCompetitors = (list: Competitor[]) => u('competitors')(JSON.stringify(list))
+  const addCompetitor = () => saveCompetitors([...competitors, { id: crypto.randomUUID(), name: '', strengths: '', weaknesses: '', diff: '' }])
+  const updCompetitor = (id: string, f: keyof Competitor, v: string) =>
+    saveCompetitors(competitors.map(c => c.id === id ? { ...c, [f]: v } : c))
+  const delCompetitor = (id: string) => saveCompetitors(competitors.filter(c => c.id !== id))
+
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 40px' }}>
       <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 26, fontWeight: 700, marginBottom: 32, color: C.text }}>Профіль бренду</h1>
-      <Card style={{ marginBottom: 24 }}>
-        <Hd>Основне</Hd>
+
+      {/* 1. Хто я */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Хто я</Hd>
+        <Field label="Ім'я / Назва бренду" value={p.brandName} onChange={u('brandName')} placeholder="Як вас звати або назва бренду" />
+        <Field label="Послуги" value={p.services} onChange={u('services')} multiline rows={3} placeholder="Що саме ви пропонуєте?" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
-          <Field label="Назва бренду" value={p.brandName} onChange={u('brandName')} placeholder="Назва вашого бренду" />
-          <Field label="Ніша / Індустрія" value={p.niche} onChange={u('niche')} placeholder="Краса, фітнес, освіта…" />
+          <Field label="Географія" value={p.geography} onChange={u('geography')} placeholder="Місто, країна, онлайн…" />
+          <Field label="Ціни" value={p.prices} onChange={u('prices')} placeholder="Від … грн / пакет від …" />
         </div>
-        <Field label="Tagline" value={p.tagline} onChange={u('tagline')} placeholder="Короткий слоган" />
       </Card>
-      <Card style={{ marginBottom: 24 }}>
-        <Hd>ДНК бренду</Hd>
-        <Field label="Місія" value={p.mission} onChange={u('mission')} multiline rows={3} placeholder="Навіщо існує бренд?" />
-        <Field label="Бачення" value={p.vision} onChange={u('vision')} multiline rows={3} placeholder="Яким буде бренд через 3–5 років?" />
-        <Field label="Цінності" value={p.values} onChange={u('values')} multiline rows={3} placeholder="Ключові принципи та цінності" />
+
+      {/* 2. Місія, візія, цінності */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Місія, візія, цінності</Hd>
+        <Field label="Місія" value={p.mission} onChange={u('mission')} multiline rows={3} placeholder="Навіщо ви існуєте? Яку проблему вирішуєте?" />
+        <Field label="Візія" value={p.vision} onChange={u('vision')} multiline rows={3} placeholder="Яким ви бачите бренд через 3–5 років?" />
+        <Field label="Цінності" value={p.values} onChange={u('values')} multiline rows={3} placeholder="Принципи, якими керується бренд" />
       </Card>
-      <Card style={{ marginBottom: 24 }}>
-        <Hd>Аудиторія та позиціювання</Hd>
-        <Field label="Цільова аудиторія" value={p.audience} onChange={u('audience')} multiline rows={4} placeholder="Хто ваш ідеальний клієнт?" />
-        <Field label="УЦП (унікальна цінністна пропозиція)" value={p.uvp} onChange={u('uvp')} multiline rows={3} placeholder="Що вирізняє вас серед інших?" />
-        <Field label="Tone of Voice" value={p.toneOfVoice} onChange={u('toneOfVoice')} multiline rows={3} placeholder="Як ви спілкуєтесь з аудиторією?" />
+
+      {/* 3. Архетипи, вороги, кити */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Архетипи, вороги, кити</Hd>
+        <Field label="Архетипи бренду" value={p.archetypes} onChange={u('archetypes')} multiline rows={3} placeholder="Герой, Мудрець, Творець… який архетип і чому?" />
+        <Field label="Вороги бренду" value={p.enemies} onChange={u('enemies')} multiline rows={3} placeholder="Від чого рятуєте клієнта? Що ви відкидаєте?" />
+        <Field label="Кити (комунікаційні стовпи)" value={p.pillars} onChange={u('pillars')} multiline rows={3} placeholder="3–5 ключових тем, навколо яких будується весь контент" />
       </Card>
-      <Card>
-        <Hd>Соціальні мережі та посилання</Hd>
+
+      {/* 4. УЦП і ключовий меседж */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>УЦП і ключовий меседж</Hd>
+        <Field label="Унікальна ціннісна пропозиція (УЦП)" value={p.uvp} onChange={u('uvp')} multiline rows={3} placeholder="Що вирізняє вас серед усіх інших?" />
+        <Field label="Ключовий меседж" value={p.keyMessage} onChange={u('keyMessage')} multiline rows={3} placeholder="Одне речення, яке описує суть вашого бренду" />
+      </Card>
+
+      {/* 5. Tone of Voice */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>Tone of Voice</Hd>
+        <Field label="Тон і стиль спілкування" value={p.toneOfVoice} onChange={u('toneOfVoice')} multiline rows={6} placeholder={'Як ви говорите з аудиторією?\n\nНаприклад:\n— Дружній, відкритий, без канцеляриту\n— Звертаємось на «ти»\n— Використовуємо гумор, але без зарозумілості\n— Не вживаємо: синергія, інноваційний, унікальний'} />
+      </Card>
+
+      {/* 6. БІО профілю і хайлайтси */}
+      <Card style={{ marginBottom: 20 }}>
+        <Hd>БІО профілю і хайлайтси</Hd>
+        <Field label="БІО профілю" value={p.bioProfile} onChange={u('bioProfile')} multiline rows={4} placeholder={'Текст шапки профілю в Instagram/TikTok\n\nНаприклад:\nSMM-стратег для малого бізнесу 🌿\nДопомагаю продавати через Instagram\n↓ Безкоштовна консультація'} />
+        <Field label="Хайлайтси" value={p.highlights} onChange={u('highlights')} multiline rows={3} placeholder="Які рубрики хайлайтсів? Що в кожній?" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
-          <Field label="Instagram" value={p.instagram} onChange={u('instagram')} placeholder="@username або URL" />
-          <Field label="TikTok" value={p.tiktok} onChange={u('tiktok')} placeholder="@username або URL" />
+          <Field label="Instagram" value={p.instagram} onChange={u('instagram')} placeholder="@username" />
+          <Field label="TikTok" value={p.tiktok} onChange={u('tiktok')} placeholder="@username" />
           <Field label="Facebook" value={p.facebook} onChange={u('facebook')} placeholder="URL сторінки" />
           <Field label="YouTube" value={p.youtube} onChange={u('youtube')} placeholder="URL каналу" />
           <Field label="Сайт" value={p.website} onChange={u('website')} placeholder="https://…" />
+        </div>
+      </Card>
+
+      {/* 7. Конкуренти */}
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <Hd>Конкуренти</Hd>
+          <Btn sm onClick={addCompetitor}><Plus size={14} />Додати</Btn>
+        </div>
+        {competitors.length === 0 && <p style={{ color: C.muted, fontSize: 14 }}>Ще немає конкурентів. Додайте першого.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {competitors.map((c, i) => (
+            <div key={c.id} style={{ background: C.surf2, borderRadius: 12, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <span style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Конкурент {i + 1}</span>
+                <button onClick={() => delCompetitor(c.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}><Trash2 size={14} /></button>
+              </div>
+              <Field label="Назва / Ім'я" value={c.name} onChange={v => updCompetitor(c.id, 'name', v)} placeholder="Хто це?" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+                <Field label="Сильні сторони" value={c.strengths} onChange={v => updCompetitor(c.id, 'strengths', v)} multiline rows={3} placeholder="Що вони роблять добре?" />
+                <Field label="Слабкі сторони" value={c.weaknesses} onChange={v => updCompetitor(c.id, 'weaknesses', v)} multiline rows={3} placeholder="Де вони програють?" />
+              </div>
+              <Field label="Моя відмінність" value={c.diff} onChange={v => updCompetitor(c.id, 'diff', v)} multiline rows={2} placeholder="Чому клієнт оберe мене, а не їх?" />
+            </div>
+          ))}
         </div>
       </Card>
     </div>
