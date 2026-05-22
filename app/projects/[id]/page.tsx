@@ -3312,6 +3312,291 @@ function MonthlyReportsForm({ data, updateField, projectName }: { data: ProjectD
   )
 }
 
+// ─── Brand Overview Panel ────────────────────────────────────────────────────
+
+function OSection({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-200 mb-4">
+        <span>{icon}</span>{title}
+      </h3>
+      {children}
+    </div>
+  )
+}
+
+function OLabel({ text }: { text: string }) {
+  return <p className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-1.5">{text}</p>
+}
+
+function OChip({ text, color = 'bg-slate-700/80 text-slate-300' }: { text: string; color?: string }) {
+  return <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-medium ${color}`}>{text}</span>
+}
+
+const TOV_LABELS: Record<string, string> = {
+  informal: 'Неформально', formal: 'Формально',
+  ty: 'На «ти»', vy: 'На «Ви»',
+  restrained: 'Стримано', emotional: 'Емоційно',
+  use: 'Гумор ✓', avoid: 'Без гумору',
+  expert: 'Експерт', partner: 'Партнер',
+}
+
+function BrandOverviewPanel({ project }: { project: Project }) {
+  const d = project.data
+
+  const goals       = parseGoals(d.goals)
+  const analytics   = parseAnalytics(d.analytics)
+  const uvp         = parseUvp(d.uvp)
+  const tov         = parseToneOfVoice(d.toneOfVoice)
+  const values      = parseBrandValues(d.brandValues)
+  const archetypes  = parseBrandArchetypes(d.brandArchetypes)
+  const enemies     = parseBrandEnemies(d.brandEnemies)
+  const pillars     = parsePillars(d.communicationPillars)
+  const rubrics     = parseRubricator(d.contentRubricator)
+
+  return (
+    <div className="space-y-4 pb-8">
+      {/* Hero card */}
+      <div className="bg-gradient-to-br from-indigo-500/10 to-slate-800/50 border border-indigo-500/20 rounded-2xl p-6">
+        <div className="flex items-center gap-4 mb-4">
+          <span className="text-5xl">{project.emoji}</span>
+          <div>
+            <h1 className="text-xl font-bold text-white">{d.companyName || project.name}</h1>
+            {d.companyIndustry && <p className="text-slate-400 text-sm mt-0.5">{d.companyIndustry}</p>}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {d.companyYear  && <OChip text={`з ${d.companyYear} р.`} />}
+          {d.companyGeo   && <OChip text={`📍 ${d.companyGeo}`} />}
+          {d.companyTeam  && <OChip text={`👥 ${d.companyTeam}`} />}
+          {project.platforms?.map(p => <OChip key={p} text={p} color="bg-indigo-500/20 text-indigo-300" />)}
+        </div>
+        {d.companyProducts && (
+          <p className="mt-4 text-sm text-slate-300 leading-relaxed border-t border-slate-700/50 pt-4">{d.companyProducts}</p>
+        )}
+      </div>
+
+      {/* Mission + Vision */}
+      {(d.brandMission || d.brandVision) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {d.brandMission && (
+            <OSection icon="🎯" title="Місія">
+              <p className="text-sm text-slate-300 leading-relaxed">{d.brandMission}</p>
+            </OSection>
+          )}
+          {d.brandVision && (
+            <OSection icon="🔭" title="Візія">
+              <p className="text-sm text-slate-300 leading-relaxed">{d.brandVision}</p>
+            </OSection>
+          )}
+        </div>
+      )}
+
+      {/* Strategic Goals */}
+      {goals.strategic.some(g => g.title.trim()) && (
+        <OSection icon="⭐" title="Стратегічні цілі">
+          <div className="space-y-3">
+            {goals.strategic.filter(g => g.title.trim()).map((g, i) => (
+              <div key={g.id} className="flex gap-3">
+                <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-200">{g.title}</p>
+                  {g.description && <p className="text-xs text-slate-500 mt-0.5">{g.description}</p>}
+                  {g.metrics && <p className="text-xs text-indigo-400 mt-0.5">📊 {g.metrics}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </OSection>
+      )}
+
+      {/* Brand DNA */}
+      {(values.length > 0 || archetypes.primary.name || enemies.length > 0 || pillars.length > 0) && (
+        <OSection icon="🧬" title="ДНК бренду">
+          <div className="space-y-5">
+            {values.length > 0 && (
+              <div>
+                <OLabel text="Цінності" />
+                <div className="flex flex-wrap gap-2">
+                  {values.map(v => <OChip key={v.id} text={v.title} color="bg-violet-500/20 text-violet-300" />)}
+                </div>
+              </div>
+            )}
+            {archetypes.primary.name && (
+              <div>
+                <OLabel text="Архетипи" />
+                <div className="flex flex-wrap gap-2">
+                  <OChip text={`★ ${archetypes.primary.name}`} color="bg-indigo-500/20 text-indigo-300" />
+                  {archetypes.secondary.name && <OChip text={archetypes.secondary.name} />}
+                </div>
+              </div>
+            )}
+            {enemies.length > 0 && (
+              <div>
+                <OLabel text="Вороги бренду" />
+                <div className="flex flex-wrap gap-2">
+                  {enemies.map((e, i) => <OChip key={i} text={`✕ ${e}`} color="bg-red-500/10 text-red-400" />)}
+                </div>
+              </div>
+            )}
+            {pillars.length > 0 && (
+              <div>
+                <OLabel text="Кити комунікації" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {pillars.map((p, i) => (
+                    <div key={p.id} className="flex gap-2 bg-slate-900/40 rounded-xl p-3">
+                      <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                      <div>
+                        <p className="text-xs font-medium text-slate-300">{p.topic}</p>
+                        {p.description && <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{p.description}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </OSection>
+      )}
+
+      {/* UVP */}
+      {(uvp.keyMessage || uvp.features.length > 0 || uvp.insight) && (
+        <OSection icon="💎" title="Унікальна ціннісна пропозиція">
+          {uvp.keyMessage && (
+            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 mb-4">
+              <p className="text-xs text-indigo-400 font-semibold uppercase tracking-wider mb-1">Ключовий меседж</p>
+              <p className="text-sm text-white leading-relaxed italic">«{uvp.keyMessage}»</p>
+            </div>
+          )}
+          {uvp.features.length > 0 && (
+            <div className="space-y-2">
+              {uvp.features.map((f, i) => (
+                <div key={f.id} className="flex gap-3 p-3 bg-slate-900/40 rounded-xl">
+                  <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-200 font-medium">{f.what}</p>
+                    {f.difference && <p className="text-xs text-slate-500 mt-0.5">↔ {f.difference}</p>}
+                    {f.proof && <p className="text-xs text-emerald-500 mt-0.5">✓ {f.proof}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {uvp.insight && (
+            <div className="mt-3 pt-3 border-t border-slate-700/50">
+              <OLabel text="Інсайт" />
+              <p className="text-sm text-slate-300 leading-relaxed">{uvp.insight}</p>
+            </div>
+          )}
+        </OSection>
+      )}
+
+      {/* Audience */}
+      {(analytics.subscribers || analytics.champions.length > 0 || analytics.segmentation.length > 0 || analytics.interests) && (
+        <OSection icon="👥" title="Аудиторія">
+          {(analytics.subscribers || analytics.reach || analytics.er) && (
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[
+                { label: 'Підписники', val: analytics.subscribers },
+                { label: 'Охоплення',  val: analytics.reach },
+                { label: 'ER',         val: analytics.er ? `${analytics.er}%` : '' },
+              ].filter(m => m.val).map(m => (
+                <div key={m.label} className="bg-slate-900/50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-white">{m.val}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{m.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {analytics.interests && (
+            <div className="mb-4">
+              <OLabel text="Інтереси" />
+              <p className="text-sm text-slate-300">{analytics.interests}</p>
+            </div>
+          )}
+          {analytics.champions.length > 0 && (
+            <div className="mb-4">
+              <OLabel text="Бренд-чемпіони" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {analytics.champions.map(c => (
+                  <div key={c.id} className="bg-slate-900/50 rounded-xl p-3 space-y-1">
+                    <p className="text-sm font-semibold text-emerald-400">{c.name}</p>
+                    {c.demographics && <p className="text-xs text-slate-400">{c.demographics}</p>}
+                    {c.profession   && <p className="text-xs text-slate-500">{c.profession}</p>}
+                    {c.needs        && <p className="text-xs text-slate-500">🎯 {c.needs}</p>}
+                    {c.pains        && <p className="text-xs text-slate-500">⚡ {c.pains}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {analytics.segmentation.length > 0 && (
+            <div>
+              <OLabel text="Сегменти" />
+              <div className="space-y-3">
+                {analytics.segmentation.map((seg, i) => (
+                  <div key={seg.id} className="bg-slate-900/50 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-amber-400 mb-2">Сегмент {i + 1}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      {SEGMENT_COLS.filter(c => (seg[c.key] as string)?.trim()).map(col => (
+                        <div key={col.key}>
+                          <p className="text-slate-600 mb-0.5">{col.label}</p>
+                          <p className="text-slate-300">{seg[col.key] as string}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </OSection>
+      )}
+
+      {/* Tone of Voice */}
+      {(tov.formality || tov.address || tov.emotion || tov.notes) && (
+        <OSection icon="🗣️" title="Tone of Voice">
+          <div className="flex flex-wrap gap-2 mb-3">
+            {[tov.formality, tov.address, tov.emotion, tov.humor, tov.position].filter(Boolean).map((v, i) => (
+              <OChip key={i} text={TOV_LABELS[v] ?? v} color="bg-slate-700 text-slate-200" />
+            ))}
+          </div>
+          {tov.notes && <p className="text-sm text-slate-400 leading-relaxed border-t border-slate-700/50 pt-3">{tov.notes}</p>}
+        </OSection>
+      )}
+
+      {/* Content rubricator */}
+      {rubrics.length > 0 && (
+        <OSection icon="📌" title="Рубрикатор контенту">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {rubrics.map((r, i) => (
+              <div key={r.id} className="bg-slate-900/50 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                  <p className="text-sm font-medium text-slate-200">{r.name}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {r.frequency && <OChip text={r.frequency} />}
+                  {r.format    && <OChip text={r.format} />}
+                </div>
+                {r.goal && <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{r.goal}</p>}
+              </div>
+            ))}
+          </div>
+        </OSection>
+      )}
+
+      {/* Unifying idea */}
+      {d.unifyingIdea && (
+        <div className="bg-gradient-to-br from-violet-500/10 to-slate-800/50 border border-violet-500/20 rounded-2xl p-5">
+          <p className="text-xs text-violet-400 font-semibold uppercase tracking-wider mb-2">Обʼєднуюча ідея</p>
+          <p className="text-sm text-slate-200 leading-relaxed">{d.unifyingIdea}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -3327,6 +3612,7 @@ export default function ProjectPage() {
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [tempName, setTempName] = useState('')
+  const [showOverview, setShowOverview] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -3366,6 +3652,7 @@ export default function ProjectPage() {
     setActiveGroupId(groupId)
     setActiveTabId(group.tabs[0].id)
     setSidebarOpen(false)
+    setShowOverview(false)
   }
 
   if (!project) {
@@ -3475,8 +3762,24 @@ export default function ProjectPage() {
         </div>
       </div>
 
+      {/* Overview toggle */}
+      <div className="px-2 pt-3 pb-1">
+        <button
+          onClick={() => { setShowOverview(true); setSidebarOpen(false) }}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
+            showOverview
+              ? 'bg-emerald-500/20 text-emerald-300'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+          }`}
+        >
+          <span className="text-lg flex-shrink-0">📋</span>
+          <span className="text-sm font-medium">Огляд бренду</span>
+        </button>
+      </div>
+      <div className="mx-4 border-t border-slate-700/40 my-1" />
+
       {/* Nav groups */}
-      <nav className="flex-1 overflow-y-auto py-3 scrollbar-thin space-y-0.5 px-2">
+      <nav className="flex-1 overflow-y-auto py-1 scrollbar-thin space-y-0.5 px-2">
         {GROUPS.map((group) => {
           const filled = groupFilled(group, project.data)
           const total = group.tabs.length
@@ -3563,7 +3866,26 @@ export default function ProjectPage() {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 sm:px-8 py-8">
+          <div className={`mx-auto px-4 sm:px-8 py-8 ${showOverview ? 'max-w-4xl' : 'max-w-3xl'}`}>
+
+          {showOverview ? (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Бренд-бриф</p>
+                  <h1 className="text-2xl font-bold text-white mt-0.5">Огляд бренду</h1>
+                </div>
+                <button
+                  onClick={() => setShowOverview(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-sm text-slate-300 hover:text-white transition-all"
+                >
+                  <Edit3 size={14} /> Редагувати
+                </button>
+              </div>
+              <BrandOverviewPanel project={project} />
+            </>
+          ) : (
+            <>
 
             {/* Block header */}
             <div className="mb-6">
@@ -3696,6 +4018,9 @@ export default function ProjectPage() {
                 </button>
               )}
             </div>
+
+            </>
+          )}
 
           </div>
         </div>
