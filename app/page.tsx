@@ -874,7 +874,7 @@ function ClientsSection() {
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
         {(['all', 'active', 'paused', 'ended'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600, background: filter === f ? C.accent : C.surf, color: filter === f ? C.surf : C.muted, border: `1px solid ${C.border}` as string }}>
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: '7px 16px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600, background: filter === f ? C.accent : C.surf, color: filter === f ? C.surf : C.muted }}>
             {f === 'all' ? 'Всі' : STATUS_LABELS[f]}
           </button>
         ))}
